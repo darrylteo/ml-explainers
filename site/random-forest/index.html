@@ -195,6 +195,7 @@ a.btn{text-decoration:none;display:inline-block}
 .verdict .vx{font-size:11px;color:var(--muted);margin-top:8px}
 @media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
 <link rel="stylesheet" href="../shared/cosmos.css">
 </head>
 <body>
@@ -230,7 +231,13 @@ a.btn{text-decoration:none;display:inline-block}
           <div class="icard"><div class="num">2</div><h3>Random features per split</h3><p>At every split only <b>2 of the 5</b> features are on offer. Choose the one that cuts Gini impurity the most.</p></div>
           <div class="icard"><div class="num">3</div><h3>Many trees vote</h3><p>Repeat 500 times. A new row drops through every tree; the most common answer (the <b>mode</b>) wins.</p></div>
         </div>
-        <div class="gini-note">Gini impurity = 1 − p(Pass)² − p(Fail)²  ·  0 = pure node, 0.5 = 50/50 mix</div>
+        <div class="mathgrid">
+          <div class="mcard"><div class="mlab">Gini impurity of a node</div><div data-tex="\tip{G}{G} = 1 - \sum_{\tip{k}{k}} \tip{pk}{p_k^{2}}" data-plain="G = 1 − Σ_k p_k²"></div></div>
+          <div class="mcard"><div class="mlab">Reduction in error from a split</div><div data-tex="\tip{dG}{\Delta G} = \tip{Gp}{G_{\text{parent}}} - \frac{\tip{nL}{n_L}}{\tip{n}{n}}\,\tip{GL}{G_L} - \frac{\tip{nR}{n_R}}{\tip{n}{n}}\,\tip{GR}{G_R}" data-plain="ΔG = G_parent − (n_L/n)·G_L − (n_R/n)·G_R"></div></div>
+          <div class="mcard"><div class="mlab">Features offered at each split</div><div data-tex="\tip{mtry}{m_{\text{try}}} = \lfloor \sqrt{\tip{p}{p}} \rfloor = \lfloor \sqrt{5} \rfloor = 2" data-plain="m_try = ⌊√p⌋ = ⌊√5⌋ = 2"></div></div>
+          <div class="mcard"><div class="mlab">Forest prediction for a new row</div><div data-tex="\tip{yhat}{\hat{y}} = \tip{mode}{\operatorname{mode}}\big\{\, \tip{hb}{h_1(\tip{x}{x})},\ \tip{hb}{h_2(\tip{x}{x})},\ \dots,\ \tip{hb}{h_{\tip{B}{B}}(\tip{x}{x})} \,\big\}" data-plain="ŷ = mode{ h_1(x), …, h_B(x) }"></div></div>
+        </div>
+        <p class="mhint"><b>Hover or tap any symbol</b> to see what it means.</p>
       </div>
       <svg id="treeSvg" class="hide"></svg>
       <canvas id="cv" class="hide"></canvas>
@@ -241,6 +248,81 @@ a.btn{text-decoration:none;display:inline-block}
   </section>
 </main>
 
+<script>window.MATH_TIPS = {
+ "G": {
+  "name": "Gini impurity G",
+  "def": "The chance that two samples drawn at random from the node belong to different classes. 0 means the node is pure; 0.5 is a 50/50 mix of Pass and Fail."
+ },
+ "k": {
+  "name": "Class k",
+  "def": "Runs over the classes of the response: Pass and Fail."
+ },
+ "pk": {
+  "name": "Class share pₖ",
+  "def": "Fraction of the node’s samples in class k, counting bootstrap duplicates. 4 Pass out of 10 gives p = 0.4."
+ },
+ "dG": {
+  "name": "Reduction in error ΔG",
+  "def": "How much the split lowers impurity: the parent’s Gini minus the size-weighted Gini of its two children. This is the number on each split card; bigger is better."
+ },
+ "Gp": {
+  "name": "Parent impurity",
+  "def": "Gini impurity of the leaf you are about to split."
+ },
+ "n": {
+  "name": "Node size n",
+  "def": "Samples in the node being split, counting bootstrap duplicates."
+ },
+ "nL": {
+  "name": "Left size n_L",
+  "def": "Samples sent to the “yes” child (feature ≤ threshold)."
+ },
+ "nR": {
+  "name": "Right size n_R",
+  "def": "Samples sent to the “no” child (feature > threshold)."
+ },
+ "GL": {
+  "name": "Left impurity G_L",
+  "def": "Gini impurity of the “yes” child."
+ },
+ "GR": {
+  "name": "Right impurity G_R",
+  "def": "Gini impurity of the “no” child."
+ },
+ "mtry": {
+  "name": "mtry",
+  "def": "How many features are drawn at random as candidates at every split. Fewer candidates make the trees more different from each other.",
+  "val": "R randomForest default for classification: ⌊√p⌋ = 2"
+ },
+ "p": {
+  "name": "Number of features p",
+  "def": "Columns the trees can split on: Study, Sleep, Attend, Mock and Phone.",
+  "val": "p = 5"
+ },
+ "yhat": {
+  "name": "Prediction ŷ",
+  "def": "The forest’s answer for the new row."
+ },
+ "mode": {
+  "name": "Mode",
+  "def": "The most common value. Every tree votes and the class with the most votes wins."
+ },
+ "hb": {
+  "name": "Tree vote h_b(x)",
+  "def": "The class of the leaf that row x lands in when dropped through tree b."
+ },
+ "x": {
+  "name": "New row x",
+  "def": "The student you type in on the Predict step: values for the 5 features."
+ },
+ "B": {
+  "name": "Number of trees B",
+  "def": "How many trees vote.",
+  "val": "ntree = 500 (R default)"
+ }
+};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="../shared/math.js"></script>
 <script src="../shared/sound.js"></script>
 <script src="../shared/fx.js"></script>
 <script>

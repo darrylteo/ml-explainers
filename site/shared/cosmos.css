@@ -110,3 +110,22 @@ tr.newrow td{background:rgba(110,231,255,.06)}
 
 *{scrollbar-color:rgba(140,160,255,.3) transparent}
 @media (prefers-reduced-motion: reduce){.cosmos-stars b{animation:none;opacity:.6}}
+
+/* typeset formulas (shared/math.js + KaTeX) */
+.mathgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:10px}
+.mcard{background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:14px;padding:11px 14px 4px;min-width:0}
+.mcard.wide{grid-column:1/-1}
+.mlab{font:700 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mcard .katex-display{margin:.4em 0 .3em;overflow-x:auto;overflow-y:hidden;padding:8px 2px}
+.mcard .katex{font-size:1.18em;color:var(--ink)}
+.math-plain{display:block;font:500 14px var(--mono);color:var(--ink);padding:10px 0}
+.mhint{font:500 12px var(--sans);color:var(--muted);text-align:center;margin:0}
+.mhint b{color:var(--accent);font-weight:600}
+[class*="mxt-"]{cursor:help;border-radius:5px;transition:background .15s,color .15s,box-shadow .15s}
+[class*="mxt-"].mx-on,[class*="mxt-"]:focus-visible{background:rgba(110,231,255,.16);color:var(--accent);box-shadow:0 0 14px rgba(110,231,255,.25);outline:none}
+.mathtip{position:fixed;z-index:60;max-width:300px;padding:10px 12px;border-radius:12px;background:rgba(9,12,30,.97);border:1px solid rgba(110,231,255,.4);box-shadow:0 0 30px rgba(110,200,255,.22),0 16px 40px rgba(0,0,0,.6);color:var(--ink);font:400 13px/1.45 var(--sans);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .14s,transform .14s}
+.mathtip.show{opacity:1;transform:none}
+.mathtip b{display:block;color:var(--accent);font-weight:700;margin-bottom:3px}
+.mathtip span{display:block;color:#c9cfee}
+.mathtip em{display:block;margin-top:5px;font:600 11.5px var(--mono);font-style:normal;color:var(--pass)}
+@media (max-width:600px){.mcard .katex{font-size:1em}.mcard{padding:10px 10px 2px}}
