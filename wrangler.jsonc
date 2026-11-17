@@ -1,0 +1,8 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Static files only, with no Worker script, so requests are free.
+  // `npm run deploy` uploads ./site to https://ml-explainers.<subdomain>.workers.dev.
+  "name": "ml-explainers",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./site", "not_found_handling": "404-page" }
+}
