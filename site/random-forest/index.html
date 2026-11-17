@@ -521,6 +521,7 @@ function renderCtrl() {
       <h3>${S.bootDone ? 'Tree 1’s sample is ready' : 'Drawing 10 rows with replacement…'}</h3>
       <div class="draws">${S.boot.map(i => `<span class="d ${Y[i] ? 'fail' : 'pass'}">#${i + 1}</span>`).join('')}${S.bootDone ? '' : '<span class="d ghost">…</span>'}</div>`;
     if (S.bootDone) h += `<p>Repeated: <b>${dup.join(', ') || 'none'}</b>. Out-of-bag (Tree 1 never sees them): <b>${oob.join(', ') || 'none'}</b>.</p>
+      <p class="small muted">So that you have something to split, this demo redraws Tree 1's sample until it has at least 3 Pass and 3 Fail rows. randomForest itself doesn't do this, and the other 499 trees here are drawn with no such rule.</p>
       <button class="btn primary" data-act="plant">Plant Tree 1 →</button>`;
   } else if (st === 'grow') {
     h = ctrlGrow();

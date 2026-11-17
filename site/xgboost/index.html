@@ -240,7 +240,7 @@ a.btn{text-decoration:none;display:inline-block}
           <div class="mcard"><div class="mlab">Residual: what is still wrong</div><div data-tex="\tip{r}{r_{\tip{i}{i}}} = \tip{y}{y_{\tip{i}{i}}} - \tip{yhat}{\hat{y}_{\tip{i}{i}}^{(\tip{t}{t}-1)}}" data-plain="r_i = y_i − ŷ_i⁽ᵗ⁻¹⁾"></div></div>
           <div class="mcard"><div class="mlab">Leaf weight</div><div data-tex="\tip{w}{w} = \frac{\tip{S}{S}}{\tip{n}{n} + \tip{lambda}{\lambda}}, \qquad \tip{S}{S} = \sum_{\tip{i}{i}\,\in\,\text{leaf}} \tip{r}{r_{i}}" data-plain="w = S / (n + λ),  S = Σ r_i over the leaf"></div></div>
           <div class="mcard"><div class="mlab">Add the tree, shrunk</div><div data-tex="\tip{yhat}{\hat{y}_{\tip{i}{i}}^{(\tip{t}{t})}} = \tip{yhat}{\hat{y}_{\tip{i}{i}}^{(\tip{t}{t}-1)}} + \tip{eta}{\eta}\; \tip{w}{w}_{\tip{leaf}{\mathrm{leaf}_t(i)}}" data-plain="ŷ_i⁽ᵗ⁾ = ŷ_i⁽ᵗ⁻¹⁾ + η · w_leaf"></div></div>
-          <div class="mcard wide"><div class="mlab">Gain of a split</div><div data-tex="\tip{gain}{\text{Gain}} = \frac{1}{2}\left[\, \frac{\tip{SL}{S_L^{2}}}{\tip{nL}{n_L}+\tip{lambda}{\lambda}} + \frac{\tip{SR}{S_R^{2}}}{\tip{nR}{n_R}+\tip{lambda}{\lambda}} - \frac{\tip{S}{S^{2}}}{\tip{n}{n}+\tip{lambda}{\lambda}} \,\right] - \tip{gamma}{\gamma}" data-plain="Gain = ½ [ S_L²/(n_L+λ) + S_R²/(n_R+λ) − S²/(n+λ) ] − γ"></div></div>
+          <div class="mcard wide"><div class="mlab">Gain of a split (made only if Gain &gt; γ)</div><div data-tex="\tip{gain}{\text{Gain}} = \frac{\tip{SL}{S_L^{2}}}{\tip{nL}{n_L}+\tip{lambda}{\lambda}} + \frac{\tip{SR}{S_R^{2}}}{\tip{nR}{n_R}+\tip{lambda}{\lambda}} - \frac{\tip{S}{S^{2}}}{\tip{n}{n}+\tip{lambda}{\lambda}} \;>\; \tip{gamma}{\gamma}" data-plain="Gain = S_L²/(n_L+λ) + S_R²/(n_R+λ) − S²/(n+λ),  split if Gain > γ"></div></div>
         </div>
         <p class="mhint"><b>Hover or tap any symbol</b> to see what it means.</p>
       </div>
@@ -307,11 +307,12 @@ a.btn{text-decoration:none;display:inline-block}
  },
  "gain": {
   "name": "Gain",
-  "def": "How much splitting the node lowers the regularised squared-error loss. XGBoost picks the split with the largest gain, and only splits if it is above γ."
+  "def": "How much splitting the node lowers the regularised squared-error loss. XGBoost picks the split with the largest gain and only makes it if the gain is above γ. This is the number xgboost itself reports (get_dump, importance_type='gain'). The XGBoost paper writes it with a ½ in front, which halves every gain but never changes which split wins.",
+  "val": "xgboost compares this full value, without the ½, against γ"
  },
  "SL": {
   "name": "S_L",
-  "def": "Residual sum of the rows sent to the “yes” child (feature ≤ threshold)."
+  "def": "Residual sum of the rows sent to the “yes” child (feature < cut)."
  },
  "SR": {
   "name": "S_R",
@@ -375,6 +376,9 @@ const N = 10, OUT = 6;
 const ETA = 0.3, LAMBDA = 1, GAMMA = 0, MAXD = 6, MCW = 1, NROUNDS = 100, NHAND = 3;
 const BASE = sum(Y) / N;   // base_score is estimated from the data: the mean, for squared error
 const ALL = [...Array(N).keys()];
+// tree_method 'hist' (the default since 2.0) makes its candidate cuts once from the whole training column: with
+// fewer than max_bin = 256 distinct values every distinct value is a cut, and a row goes left when value < cut.
+const CUTS = FEATS.map((_, f) => [...new Set(X.map(x => x[f]))].sort((a, b) => a - b));
 
 /* ---------------- tree maths (squared error: gradient = −residual, hessian = 1) ---------------- */
 function bestSplit(idx, f, r) {
@@ -383,15 +387,18 @@ function bestSplit(idx, f, r) {
   const s = sum(idx.map(i => r[i])), n = idx.length;
   let best = null;
   for (let k = 0; k < vals.length - 1; k++) {
-    const thr = (vals[k] + vals[k + 1]) / 2;
-    const L = idx.filter(i => X[i][f] <= thr), R = idx.filter(i => X[i][f] > thr);
+    // the lowest global cut above this node's value, so it can lie between two values the node has (e.g. Attend < 72)
+    const cuts = CUTS[f], thr = cuts[cuts.indexOf(vals[k]) + 1];
+    const L = idx.filter(i => X[i][f] < thr), R = idx.filter(i => X[i][f] >= thr);
     if (L.length < MCW || R.length < MCW) continue;
     const sL = sum(L.map(i => r[i])), sR = s - sL;
-    const gain = .5 * (sL * sL / (L.length + LAMBDA) + sR * sR / (R.length + LAMBDA) - s * s / (n + LAMBDA)) - GAMMA;
+    // xgboost's gain has no ½ (the paper's has one) and is compared with γ, not reduced by it
+    const gain = sL * sL / (L.length + LAMBDA) + sR * sR / (R.length + LAMBDA) - s * s / (n + LAMBDA);
     if (!best || gain > best.gain + 1e-12) best = { f, thr, L, R, sL, sR, s, n, gain, wL: sL / (L.length + LAMBDA), wR: sR / (R.length + LAMBDA) };
   }
   return best;
 }
+const splits = gain => gain > GAMMA + 1e-6;   // xgboost: loss_chg must exceed γ (and its kRtEps = 1e-6)
 let NID = 0;
 function makeNode(idx, depth, parent, r) {
   const s = sum(idx.map(i => r[i])), n = idx.length;
@@ -399,7 +406,7 @@ function makeNode(idx, depth, parent, r) {
   node.splits = FEATS.map((_, f) => bestSplit(idx, f, r));
   const valid = node.splits.filter(Boolean);
   node.bestGain = valid.length ? Math.max(...valid.map(s => s.gain)) : -Infinity;
-  node.canSplit = depth < MAXD && n >= 2 && node.bestGain > 1e-9;
+  node.canSplit = depth < MAXD && n >= 2 && splits(node.bestGain);
   return node;
 }
 const isOpen = n => !n.left && !n.stopped && n.canSplit;
@@ -409,14 +416,14 @@ function applySplit(n, s) {
 }
 function walk(n, fn) { fn(n); if (n.left) { walk(n.left, fn); walk(n.right, fn); } }
 function allNodes(r) { const a = []; walk(r, n => a.push(n)); return a; }
-const bestOf = n => n.splits.filter(s => s && s.gain > 1e-9).reduce((a, b) => (!a || b.gain > a.gain) ? b : a, null);
+const bestOf = n => n.splits.filter(s => s && splits(s.gain)).reduce((a, b) => (!a || b.gain > a.gain) ? b : a, null);
 function growAuto(r) {
   const root = makeNode(ALL, 0, null, r), q = [root];
   while (q.length) { const n = q.shift(); if (!n.canSplit) continue; applySplit(n, bestOf(n)); q.push(n.left, n.right); }
   return root;
 }
-function leafOf(n, x) { while (n.left) n = x[n.f] <= n.thr ? n.left : n.right; return n; }
-function predictPath(root, x) { const p = [root]; let n = root; while (n.left) { n = x[n.f] <= n.thr ? n.left : n.right; p.push(n); } return p; }
+function leafOf(n, x) { while (n.left) n = x[n.f] < n.thr ? n.left : n.right; return n; }
+function predictPath(root, x) { const p = [root]; let n = root; while (n.left) { n = x[n.f] < n.thr ? n.left : n.right; p.push(n); } return p; }
 function layoutTree(root) {
   let leaves = 0, maxD = 0;
   (function rec(n) {
@@ -510,7 +517,7 @@ function renderTable(flashRow = -1) {
 }
 
 /* ---------------- control panel ---------------- */
-const paramsHtml = `<div class="params">XGBRegressor defaults · <b>n_estimators</b> 100 · <b>learning_rate</b> η 0.3 · <b>max_depth</b> 6 · <b>reg_lambda</b> λ 1 · <b>gamma</b> γ 0 · <b>min_child_weight</b> 1 · <b>subsample</b> 1 · <b>colsample_bytree</b> 1 · objective reg:squarederror</div>`;
+const paramsHtml = `<div class="params">XGBRegressor defaults · <b>n_estimators</b> 100 · <b>learning_rate</b> η 0.3 · <b>max_depth</b> 6 · <b>reg_lambda</b> λ 1 · <b>gamma</b> γ 0 · <b>min_child_weight</b> 1 · <b>subsample</b> 1 · <b>colsample_bytree</b> 1 · <b>tree_method</b> hist · objective reg:squarederror</div>`;
 function renderCtrl() {
   const st = S.stage; let h = '';
   if (st === 'data') {
@@ -596,30 +603,30 @@ function whyLeaf(n) {
   return 'No split has positive gain.';
 }
 function nodeInfo(n) {
-  if (n.left) return `<div class="info">Splits on <b>${FEATS[n.f].name} ≤ ${fmtT(n.thr)}</b> with gain <b>${n.gain.toFixed(1)}</b> (${n.n} rows, Σr ${fmtS(n.s)}).</div>`;
+  if (n.left) return `<div class="info">Splits on <b>${FEATS[n.f].name} &lt; ${fmtT(n.thr)}</b> with gain <b>${n.gain.toFixed(1)}</b> (${n.n} rows, Σr ${fmtS(n.s)}).</div>`;
   return `<div class="info${n.idx.includes(OUT) ? ' warn' : ''}">Leaf with <b>${n.n}</b> row${n.n > 1 ? 's' : ''} (${n.idx.map(i => '#' + (i + 1)).join(', ')}), Σr <b>${fmtS(n.s)}</b>. ${whyLeaf(n)}<br>
     Weight w = ${fmtS(n.s)} / (${n.n} + 1) = <b>${fmtS(n.w, 2)}</b>, so each of these rows moves by η·w = <b>${fmtS(ETA * n.w, 2)}</b>.</div>`;
 }
 function splitChooser(n) {
   const best = bestOf(n);
   let h = `<div class="nodehead">Selected leaf: <b>${n.n}</b> rows · Σ residual <b>${fmtS(n.s)}</b> · weight now <b>${fmtS(n.w, 2)}</b></div>
-    <div class="lbl">XGBoost tries <b>every</b> feature (colsample_bytree = 1) and the best threshold for each. Gain = reduction in loss.</div>
+    <div class="lbl">XGBoost tries <b>every</b> feature (colsample_bytree = 1) and its best cut. Cuts are the distinct values of the whole training column (tree_method hist), and rows go left when value &lt; cut.</div>
     <div class="cards">${FEATS.map((_, f) => splitCard(n, f, n.splits[f], best)).join('')}</div>
     <div class="row"><button class="btn" data-act="stop">Stop here, make it a leaf (adds ${fmtS(ETA * n.w, 2)})</button></div>`;
   return h;
 }
 function splitCard(n, f, s, best) {
   const F = FEATS[f];
-  if (!s || s.gain <= 1e-9) return `<div class="scard disabled"><div class="sc-head"><span class="sc-name">${F.name}</span><span class="sc-gain">${s ? `best gain ${s.gain.toFixed(1)} ≤ 0` : 'one value only'}</span></div></div>`;
+  if (!s || !splits(s.gain)) return `<div class="scard disabled"><div class="sc-head"><span class="sc-name">${F.name}</span><span class="sc-gain">${s ? `best gain ${s.gain.toFixed(1)}, not above γ = ${GAMMA}` : 'one value only'}</span></div></div>`;
   const isBest = best && s === best, t = fmtT(s.thr);
   return `<button class="scard" data-act="split" data-f="${f}">
-    <div class="sc-head"><span class="sc-name">${F.name}</span><span class="sc-rule">≤ ${t}</span>${isBest ? '<span class="tag">best</span>' : ''}<span class="sc-gain">Gain<b>${s.gain.toFixed(1)}</b></span></div>
+    <div class="sc-head"><span class="sc-name">${F.name}</span><span class="sc-rule">&lt; ${t}</span>${isBest ? '<span class="tag">best</span>' : ''}<span class="sc-gain">Gain<b>${s.gain.toFixed(1)}</b></span></div>
     ${strip(n, f, s.thr)}
     <div class="sc-kids">
-      <div><span class="k">yes · ≤ ${t}</span>n=${s.L.length} · Σr ${fmtS(s.sL)}<br>w ${fmtS(s.wL, 2)}</div>
-      <div><span class="k">no · &gt; ${t}</span>n=${s.R.length} · Σr ${fmtS(s.sR)}<br>w ${fmtS(s.wR, 2)}</div>
+      <div><span class="k">yes · &lt; ${t}</span>n=${s.L.length} · Σr ${fmtS(s.sL)}<br>w ${fmtS(s.wL, 2)}</div>
+      <div><span class="k">no · ≥ ${t}</span>n=${s.R.length} · Σr ${fmtS(s.sR)}<br>w ${fmtS(s.wR, 2)}</div>
     </div>
-    <div class="sc-calc">½[(${fmtS(s.sL)})²/${s.L.length + 1} + (${fmtS(s.sR)})²/${s.R.length + 1} − (${fmtS(s.s)})²/${s.n + 1}]</div>
+    <div class="sc-calc">(${fmtS(s.sL)})²/${s.L.length + 1} + (${fmtS(s.sR)})²/${s.R.length + 1} − (${fmtS(s.s)})²/${s.n + 1}</div>
     <div class="redbar"><i style="width:${best ? s.gain / best.gain * 100 : 0}%"></i></div>
   </button>`;
 }
@@ -681,7 +688,7 @@ function renderSvg() {
   for (const n of nodes) {
     if (n.left) {
       const py = n.cy + NH / 2, ry = py + 18;
-      const txt = `${FEATS[n.f].name} ≤ ${fmtT(n.thr)}`, rw = txt.length * 7.3 + 20;
+      const txt = `${FEATS[n.f].name} < ${fmtT(n.thr)}`, rw = txt.length * 7.3 + 20;
       for (const [c, lab] of [[n.left, 'yes'], [n.right, 'no']]) {
         const x1 = n.cx, y1 = ry + 12, x2 = c.cx, y2 = c.cy - NH / 2, my = (y1 + y2) / 2;
         E += `<path class="edge" d="M${x1} ${y1}C${x1} ${my} ${x2} ${my} ${x2} ${y2}" opacity="${c.alpha}"/>
@@ -895,7 +902,7 @@ function drawTree(tr, c, C) {
       ctx.strokeStyle = hot ? C.acc : leaf ? col : C.lineS; ctx.lineWidth = hot ? 3 : 1.3; ctx.stroke();
       ctx.font = `700 ${fs}px 'JetBrains Mono', monospace`;
       ctx.fillStyle = leaf ? col : C.ink;
-      ctx.fillText(leaf ? fmtS(ETA * n.w, 2) : `${FEATS[n.f].name}≤${fmtT(n.thr)}`, x, two ? y - fs * .45 : y);
+      ctx.fillText(leaf ? fmtS(ETA * n.w, 2) : `${FEATS[n.f].name}<${fmtT(n.thr)}`, x, two ? y - fs * .45 : y);
       if (two) {
         ctx.font = `500 ${fs * .8}px 'JetBrains Mono', monospace`; ctx.fillStyle = C.muted;
         ctx.fillText(leaf ? `n=${n.n} · w ${fmtS(n.w, 1)}` : `n=${n.n} · gain ${n.gain.toFixed(0)}`, x, y + fs * .75);
@@ -1053,8 +1060,8 @@ function draw() {
       S.logKey = key;
       let h = '';
       for (let q = 0; q < p.length - 1 && q < tr.prog - 1; q++) {
-        const n = p[q], v = S.newRow[n.f], yes = v <= n.thr;
-        h += `<span>${FEATS[n.f].name} = ${v} ${yes ? '≤' : '>'} ${fmtT(n.thr)} → ${yes ? 'yes' : 'no'}</span>`;
+        const n = p[q], v = S.newRow[n.f], yes = v < n.thr;
+        h += `<span>${FEATS[n.f].name} = ${v} ${yes ? '&lt;' : '≥'} ${fmtT(n.thr)} → ${yes ? 'yes' : 'no'}</span>`;
       }
       if (tr.prog >= p.length) { const lf = p[p.length - 1]; h += `<span class="${lf.w >= 0 ? 'lp' : 'ln'}">leaf → adds ${fmtS(ETA * lf.w, 2)}</span>`; }
       $('#log').innerHTML = h;
