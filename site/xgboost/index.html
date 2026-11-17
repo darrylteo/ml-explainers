@@ -8,30 +8,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#f3f0e8; --surface:#fffdf8; --surface-2:#f0ece2; --ink:#1b1c20; --muted:#6b6e76;
-  --line:#e0dacd; --line-strong:#b8b0a0;
-  --accent:#3454d1; --accent-soft:rgba(52,84,209,.12); --on-accent:#fff;
-  --pos:#12916a; --pos-soft:rgba(18,145,106,.16); --neg:#d4532e; --neg-soft:rgba(212,83,46,.16);
-  --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,25,10,.07);
-  --sans:'Space Grotesk',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#111215; --surface:#1a1c21; --surface-2:#22252b; --ink:#ecebe6; --muted:#979aa2;
-    --line:#2d3038; --line-strong:#4b505b;
-    --accent:#8099ff; --accent-soft:rgba(128,153,255,.16); --on-accent:#0d1020;
-    --pos:#3fd09d; --pos-soft:rgba(63,208,157,.18); --neg:#ff7b56; --neg-soft:rgba(255,123,86,.18);
-    --shadow:0 1px 2px rgba(0,0,0,.3);
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#111215; --surface:#1a1c21; --surface-2:#22252b; --ink:#ecebe6; --muted:#979aa2;
-  --line:#2d3038; --line-strong:#4b505b;
-  --accent:#8099ff; --accent-soft:rgba(128,153,255,.16); --on-accent:#0d1020;
-  --pos:#3fd09d; --pos-soft:rgba(63,208,157,.18); --neg:#ff7b56; --neg-soft:rgba(255,123,86,.18);
-  --shadow:0 1px 2px rgba(0,0,0,.3);
-}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
@@ -221,8 +197,10 @@ a.btn{text-decoration:none;display:inline-block}
 .verdict .vx{font-size:11px;color:var(--muted);margin-top:8px}
 @media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
+<link rel="stylesheet" href="../shared/cosmos.css">
 </head>
 <body>
+<div class="cosmos-stars" aria-hidden="true"><i class="s1"></i><i class="s2"></i></div>
 <header class="top">
   <div class="brand">
     <a class="back" href="../">← ML Explainers</a>
@@ -232,7 +210,8 @@ a.btn{text-decoration:none;display:inline-block}
   <ol class="steps" id="steps">
     <li>Data</li><li>Tree 1</li><li>Tree 2</li><li>Tree 3</li><li>Boost</li><li>Predict</li>
   </ol>
-  <button class="btn ghost" id="soundBtn" aria-pressed="true">Sound: on</button>
+  <button class="btn ghost" id="musicBtn" aria-pressed="true">♫ Music on</button>
+  <button class="btn ghost" id="soundBtn" aria-pressed="true">Sound on</button>
   <button class="btn ghost" id="resetBtn">Restart</button>
 </header>
 
@@ -266,6 +245,8 @@ a.btn{text-decoration:none;display:inline-block}
   </section>
 </main>
 
+<script src="../shared/sound.js"></script>
+<script src="../shared/fx.js"></script>
 <script>
 (() => {
 'use strict';
@@ -403,6 +384,7 @@ const TITLES = {
 function stepIndex() { return S.stage === 'data' ? 0 : S.stage === 'tree' ? S.round : S.stage === 'boost' ? 4 : 5; }
 function setStage(st) {
   S.stage = st;
+  Sound.mood(st === 'data' ? 'intro' : st === 'tree' ? 'build' : st === 'boost' ? 'forest' : 'predict');
   const k = stepIndex();
   document.querySelectorAll('#steps li').forEach((li, i) => { li.classList.toggle('active', i === k); li.classList.toggle('done', i < k); });
   $('#stTitle').textContent = st === 'tree' ? `Tree ${S.round}: fit what the model still gets wrong` : TITLES[st][0];
@@ -672,6 +654,7 @@ svg.addEventListener('click', e => {
   const g = e.target.closest('[data-id]'); if (!g) return;
   const n = nodeById(+g.dataset.id); if (!n) return;
   S.selected = S.selected === n && !isOpen(n) ? null : n;
+  Sound.select();
   renderSvg(); renderCtrl(); renderTable(); renderRes();
   if (window.innerWidth <= 900 && isOpen(n)) $('#ctrl').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
@@ -681,17 +664,21 @@ svg.addEventListener('mouseover', e => {
 });
 svg.addEventListener('mouseleave', () => { S.hover = null; renderTable(); renderRes(); });
 
-function afterSplit() { S.selected = null; S.hover = null; relayout(true); renderCtrl(); renderTable(); renderRes(); }
+function afterSplit() {
+  S.selected = null; S.hover = null; relayout(true); renderCtrl(); renderTable(); renderRes();
+  if (!allNodes(S.root).some(isOpen)) setTimeout(() => Sound.complete(), 380);
+}
 async function autoFinish() {
   S.busy = true; renderCtrl();
   let n;
   while ((n = allNodes(S.root).find(isOpen))) {
     S.selected = n; renderSvg(); renderTable(); renderRes();
     await sleep(320);
-    applySplit(n, bestOf(n));
+    applySplit(n, bestOf(n)); Sound.split();
     S.selected = null; relayout(true); renderTable(); renderRes();
     await sleep(480);
   }
+  Sound.complete();
   S.busy = false; renderCtrl();
 }
 
@@ -700,15 +687,16 @@ async function startBase() {
   if (S.busy) return; S.busy = true; renderCtrl();
   S.F = Array(N).fill(BASE); S.hist = [Y.map(y => y - BASE)];
   S.Fd = Array(N).fill(null);
-  for (let i = 0; i < N; i++) { await sleep(130); S.Fd[i] = BASE; renderTable(i); }
-  S.Fd = S.F.slice(); S.started = true; S.busy = false; renderTable(); renderCtrl();
+  for (let i = 0; i < N; i++) { await sleep(130); S.Fd[i] = BASE; renderTable(i); Sound.tick(i); }
+  await sleep(380);
+  S.Fd = S.F.slice(); Sound.add(); S.started = true; S.busy = false; renderTable(); renderCtrl();
 }
 function plantTree(k) {
   S.round = k; S.added = false; S.selected = null; S.hover = null;
   const r = Y.map((y, i) => y - S.F[i]);
   S.root = makeNode(ALL, 0, null, r);
   setStage('tree');
-  relayout(false); renderRes();
+  relayout(false); renderRes(); Sound.select();
 }
 async function addTree() {
   if (S.busy) return; S.busy = true; renderCtrl();
@@ -716,7 +704,7 @@ async function addTree() {
   S.trees.push(tr);
   const old = S.F.slice(), nw = S.F.map((f, i) => f + ETA * leafOf(tr, X[i]).w);
   S.hist.push(Y.map((y, i) => y - nw[i]));
-  S.added = true; S.selected = null; renderSvg();
+  S.added = true; S.selected = null; renderSvg(); Sound.add();
   await tween(1200, e => { S.Fd = old.map((o, i) => lerp(o, nw[i], e)); renderTable(); renderRes(); });
   S.F = nw; S.Fd = nw.slice(); S.busy = false; renderTable(); renderRes(); renderCtrl();
 }
@@ -749,9 +737,11 @@ function tween(dur, fn) {
 }
 function camTo(target, dur, extra) { const a = { ...S.cam }; return tween(dur, (e, t) => { S.cam = camLerp(a, target, e); if (extra) extra(e, t); }); }
 const panelH = () => S.panelK * clamp(CH * .33, 150, 230);
+let COLORS = null;
 function colors() {
+  if (COLORS) return COLORS;
   const cs = getComputedStyle(document.documentElement), g = k => cs.getPropertyValue(k).trim();
-  return { pos: g('--pos'), neg: g('--neg'), posS: g('--pos-soft'), negS: g('--neg-soft'), ink: g('--ink'), muted: g('--muted'),
+  return COLORS = { pos: g('--pos'), neg: g('--neg'), posS: g('--pos-soft'), negS: g('--neg-soft'), ink: g('--ink'), muted: g('--muted'),
     line: g('--line'), lineS: g('--line-strong'), surf: g('--surface'), surf2: g('--surface-2'), acc: g('--accent'), accS: g('--accent-soft') };
 }
 function rr(x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
@@ -897,81 +887,31 @@ function drawRunning(P, C) {
   ctx.fillText(`ŷ ${S.total.toFixed(1)}`, P.x1 + 14, clamp(py + 8, P.y0 + 10, P.y1));
 }
 
-/* ---------------- sound (Web Audio, synthesized) ---------------- */
-const SND = { ctx: null, master: null, on: true, last: {} };
-try { SND.on = localStorage.getItem('rf-sound') !== 'off'; } catch (e) {}
-function audio() {
-  if (!SND.ctx) {
-    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
-    const c = new AC(), comp = c.createDynamicsCompressor(), m = c.createGain();
-    comp.threshold.value = -20; comp.ratio.value = 8; m.gain.value = .6;
-    m.connect(comp); comp.connect(c.destination);
-    SND.ctx = c; SND.master = m;
-  }
-  if (SND.ctx.state === 'suspended') SND.ctx.resume();
-  return SND.ctx;
-}
-function blip({ f, f2 = f, dur = .12, vol = .3, type = 'triangle', at = 0 }) {
-  const c = SND.ctx; if (!SND.on || !c || c.state !== 'running') return;
-  const t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
-  o.type = type; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f2, t + dur);
-  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .004); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
-  o.connect(g); g.connect(SND.master); o.start(t); o.stop(t + dur + .02);
-}
-function gate(key, ms) { const now = performance.now(); if (now - (SND.last[key] || 0) < ms) return false; SND.last[key] = now; return true; }
-const PENTA = [0, 2, 4, 7, 9];
-const note = (base, step) => base * Math.pow(2, (Math.floor(step / 5) * 12 + PENTA[((step % 5) + 5) % 5]) / 12);
+/* ---------------- sound: shared engine in ../shared/sound.js ---------------- */
+Sound.bindButtons({ music: '#musicBtn', sfx: '#soundBtn' });
 const lvlOf = b => b.ti === 0 ? 1 : b.ti < 12 ? .6 : .28;
-const gapOf = lvl => lvl === 1 ? 0 : lvl > .5 ? 12 : 24;
-function sPeg(depth, lvl) {
-  if (!gate('peg', gapOf(lvl))) return;
-  const f = note(587, depth * 2 + Math.floor(Math.random() * 3));
-  blip({ f, f2: f * .94, dur: lvl === 1 ? .22 : .1, vol: .38 * lvl, type: 'triangle' });
-  blip({ f: f * 3.01, f2: f * 2.9, dur: .05, vol: .1 * lvl, type: 'sine' });
-}
-function sLeaf(val, lvl) {
-  if (!gate('leaf', gapOf(lvl))) return;
-  const f = val >= 0 ? 262 : 196;
-  blip({ f, f2: f * .6, dur: lvl === 1 ? .3 : .13, vol: .45 * lvl, type: 'sine' });
-}
-function sWhoosh() { blip({ f: 260, f2: 900, dur: .4, vol: .06, type: 'sine' }); }
-function sLand(total, lvl) {   // pitch follows the running prediction
-  if (!gate('land', gapOf(lvl))) return;
-  const step = Math.round(clamp((total - S.wfLo) / (S.wfHi - S.wfLo), 0, 1) * 12), f = note(330, step);
-  blip({ f, f2: f * .98, dur: lvl === 1 ? .35 : .16, vol: .32 * Math.max(lvl, .45), type: 'sine' });
-  blip({ f: f * 2.76, f2: f * 2.7, dur: .08, vol: .12 * Math.max(lvl, .45), type: 'sine' });
-}
-function sVerdict() {
-  [523, 659, 784, 1047].forEach((f, i) => { blip({ f, dur: .9, vol: .22, type: 'triangle', at: i * .09 }); blip({ f: f * 2, dur: .5, vol: .05, type: 'sine', at: i * .09 }); });
-}
-function renderSoundBtn() { const b = $('#soundBtn'); b.textContent = SND.on ? 'Sound: on' : 'Sound: off'; b.setAttribute('aria-pressed', SND.on); }
-$('#soundBtn').addEventListener('click', () => {
-  SND.on = !SND.on; try { localStorage.setItem('rf-sound', SND.on ? 'on' : 'off'); } catch (e) {}
-  renderSoundBtn(); if (SND.on) { audio(); setTimeout(() => sPeg(1, 1), 30); }
-});
-renderSoundBtn();
 
 /* balls */
 function launch(ti, t0, seg, fly) {
   const tr = S.trees[ti];
   S.balls.push({ ti, path: tr.path, val: S.contrib[ti], t0, seg, fly, hold: Math.max(60, seg * .6), leafAt: false, landed: false });
 }
-function ballState(b, now) {
+function ballState(b, now, pan) {
   const t = now - b.t0; if (t < 0) return null;
   const tr = S.trees[b.ti], segs = b.path.length, tDrop = segs * b.seg;
   if (t < tDrop) {
     const j = Math.floor(t / b.seg); tr.prog = j;
-    if (j >= 1 && j !== b.lastJ) sPeg(b.path[j - 1].depth, lvlOf(b));
+    if (j >= 1 && j !== b.lastJ) Sound.peg(b.path[j - 1].depth, lvlOf(b), pan);
     b.lastJ = j;
     return { ph: 'drop', j, u: (t - j * b.seg) / b.seg };
   }
   tr.prog = segs;
-  if (!b.leafAt) { b.leafAt = true; tr.used = true; sLeaf(b.val, lvlOf(b)); }
+  if (!b.leafAt) { b.leafAt = true; tr.used = true; Sound.leaf(b.val >= 0, lvlOf(b), pan); }
   const tf = t - tDrop - b.hold;
   if (tf < 0) return { ph: 'hold' };
-  if (!b.flew) { b.flew = true; if (b.ti === 0) sWhoosh(); }
+  if (!b.flew) { b.flew = true; if (b.ti === 0) Sound.whoosh(pan); }
   if (tf < b.fly) return { ph: 'fly', u: tf / b.fly };
-  if (!b.landed) { b.landed = true; S.landed[b.ti] = true; S.total += b.val; sLand(S.total, lvlOf(b)); }
+  if (!b.landed) { b.landed = true; S.landed[b.ti] = true; S.total += b.val; Sound.land(Math.round(clamp((S.total - S.wfLo) / (S.wfHi - S.wfLo), 0, 1) * 12), lvlOf(b), clamp((b.ti + 1) / NROUNDS * 1.6 - .8, -.8, .8)); }
   return { ph: 'land' };
 }
 function ballXY(b, st, V) {
@@ -989,10 +929,8 @@ function ballXY(b, st, V) {
   const T = { x: P.X(b.ti + 1), y: Yv(S.total + b.val) }, u = ease(st.u);
   return { x: lerp(L.x, T.x, u), y: lerp(L.y, T.y, u) - Math.sin(Math.PI * st.u) * clamp(CH * .12, 40, 110), r: lerp(rb, 3, u) };
 }
-function drawBall(p, val, C) {
-  ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-  ctx.fillStyle = p.neutral ? C.acc : (val >= 0 ? C.pos : C.neg); ctx.fill();
-  if (p.r > 3.5) { ctx.lineWidth = Math.min(2.5, p.r * .25); ctx.strokeStyle = C.surf; ctx.stroke(); }
+function drawBall(p, val, C, b) {
+  FX.ball(ctx, b, p, p.neutral ? C.acc : (val >= 0 ? C.pos : C.neg), { trail: b && b.ti < 12 });
   if (!p.neutral && p.r > 6) {
     ctx.font = `700 13px 'JetBrains Mono', monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.lineWidth = 4; ctx.strokeStyle = C.surf; ctx.strokeText(fmtS(val, 2), p.x + p.r + 6, p.y);
@@ -1007,7 +945,8 @@ function draw() {
   if (!CW || !CH) return;
   const now = performance.now(), C = colors(), V = viewXf();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, CW, CH);
-  const states = S.balls.map(b => ballState(b, now));
+  const panOf = i => { const c = cellScreen(i, V); return clamp((c.sx + c.sw / 2) / CW * 2 - 1, -.9, .9); };
+  const states = S.balls.map(b => ballState(b, now, panOf(b.ti)));
   ctx.save(); ctx.beginPath(); ctx.rect(0, 0, CW, CH - panelH()); ctx.clip();
   for (let i = 0; i < S.trees.length; i++) {
     const tr = S.trees[i]; if (!tr.appear) continue;
@@ -1015,10 +954,10 @@ function draw() {
     if (c.sx > CW || c.sy > CH || c.sx + c.sw < 0 || c.sy + c.sh < 0) continue;
     drawCell(tr, i, c, C);
   }
-  S.balls.forEach((b, i) => { const st = states[i]; if (st && (st.ph === 'drop' || st.ph === 'hold')) drawBall(ballXY(b, st, V), b.val, C); });
+  S.balls.forEach((b, i) => { const st = states[i]; if (st && (st.ph === 'drop' || st.ph === 'hold')) drawBall(ballXY(b, st, V), b.val, C, b); });
   ctx.restore();
   drawPanel(C);
-  S.balls.forEach((b, i) => { const st = states[i]; if (st && st.ph === 'fly') drawBall(ballXY(b, st, V), b.val, C); });
+  S.balls.forEach((b, i) => { const st = states[i]; if (st && st.ph === 'fly') drawBall(ballXY(b, st, V), b.val, C, b); });
 
   if (S.logTree && S.trees[0].path) {
     const tr = S.trees[0], p = tr.path, key = tr.prog + '|' + p.length;
@@ -1059,18 +998,22 @@ async function runBoost() {
   await sleep(500);
   await camTo(CAM.block, 1000);
   for (let k = NHAND; k < 12; k++) {
-    const tr = S.trees[k]; tr.appear = 1;
+    const tr = S.trees[k]; tr.appear = 1; Sound.pop(k, -.6 + (k % 4) * .4);
     caption(`Tree ${k + 1} · fit to the residuals left by trees 1–${k}`);
     await tween(k === NHAND ? 650 : 360, (e, u) => { tr.reveal = u * tr.order.length; });
     showRound(k + 1); setCount(`${k + 1}<small>trees</small>`);
   }
   await sleep(400);
   caption(`…one after another, up to ${NROUNDS}`);
+  Sound.riser(1.5);
   await camTo(CAM.all, 1500);
   const rest = S.trees.slice(12), n = rest.length;
   await tween(4200, (e, t) => {
     let done = 12;
-    rest.forEach((tr, j) => { const l = clamp(t * (n + 3) - j, 0, 1); tr.appear = l > 0 ? 1 : 0; tr.reveal = l * tr.order.length; if (l >= 1) done++; });
+    rest.forEach((tr, j) => {
+      const l = clamp(t * (n + 3) - j, 0, 1); tr.appear = l > 0 ? 1 : 0; tr.reveal = l * tr.order.length; if (l >= 1) done++;
+      if (l > 0 && !tr.popped) { tr.popped = true; Sound.pop(j, POS[j + 12].c / COLS * 1.6 - .8); }
+    });
     if (done !== S.shown) { showRound(done); setCount(`${done}<small>trees</small>`); }
   });
   showRound(NROUNDS); setCount(`${NROUNDS}<small>trees</small>`);
@@ -1104,28 +1047,28 @@ async function runPredict() {
   caption('Tree 1 · your tree');
   S.logTree = true;
   await camTo(CAM.tree1, 1100);
-  launch(0, now() + 150, 700, 950);
+  launch(0, now() + 150, 720, 950);
   await waitBalls();
-  await sleep(600);
+  await sleep(700);
   S.logTree = false; $('#log').innerHTML = '';
-  caption('Trees 2 – 3 · also yours');
-  await camTo(CAM.row3, 900);
-  launch(1, now() + 100, 300, 750); launch(2, now() + 700, 300, 750);
+  caption('Trees 2 – 12');
+  await camTo(CAM.block, 1000);
+  for (let i = 1; i < 12; i++) launch(i, now() + (i - 1) * 150, 220, 750);
   await waitBalls();
-  caption('Trees 4 – 12');
-  await camTo(CAM.block, 800);
-  for (let i = 3; i < 12; i++) launch(i, now() + (i - 3) * 160, 140, 650);
-  await waitBalls();
-  caption(`Trees 13 – ${NROUNDS}`);
-  await camTo(CAM.all, 1300);
+  await sleep(250);
+  caption(`All ${NROUNDS} trees`);
+  await camTo(CAM.all, 1500);
   const base = now();
-  for (let i = 12; i < NROUNDS; i++) launch(i, base + (i - 12) * 40, 60, 650);
+  for (let i = 12; i < NROUNDS; i++) {
+    const p = POS[i], d = (p.c + p.r * 1.2) / ((COLS - 1) + (ROWS - 1) * 1.2);
+    launch(i, base + d * 1900 + Math.random() * 500, 85, 750);
+  }
   await waitBalls();
 
   const total = S.cum[NROUNDS];
   S.newPred = total;
   S.verdict = { total, c: S.contrib, c23: S.contrib[1] + S.contrib[2], rest: sum(S.contrib.slice(3)) };
-  sVerdict();
+  Sound.verdict(true);
   caption('All 100 trees have added their part');
   $('#verdict').innerHTML = `<div class="vk">XGBoost prediction · exam score</div>
     <div class="vb">${total.toFixed(1)}</div>
@@ -1145,15 +1088,15 @@ $('#ctrl').addEventListener('click', e => {
   const act = b.dataset.act, n = S.selected;
   if (act === 'start') startBase();
   else if (act === 'plant') plantTree(1);
-  else if (act === 'split' && n && !S.busy) { applySplit(n, n.splits[+b.dataset.f]); afterSplit(); }
-  else if (act === 'stop' && n && !S.busy) { n.stopped = true; afterSplit(); }
+  else if (act === 'split' && n && !S.busy) { applySplit(n, n.splits[+b.dataset.f]); Sound.split(); afterSplit(); }
+  else if (act === 'stop' && n && !S.busy) { n.stopped = true; Sound.stop(); afterSplit(); }
   else if (act === 'auto' && !S.busy) autoFinish();
   else if (act === 'add') addTree();
   else if (act === 'next' && !S.busy) plantTree(S.round + 1);
   else if (act === 'boost' && !S.busy) runBoost();
   else if (act === 'topredict' && !S.busy) toPredict();
-  else if (act === 'rand' && !S.busy) { randomInputs(); renderCtrl(); }
-  else if (act === 'drop') { audio(); runPredict(); }
+  else if (act === 'rand' && !S.busy) { randomInputs(); renderCtrl(); Sound.ui(); }
+  else if (act === 'drop') { Sound.unlock(); runPredict(); }
 });
 $('#ctrl').addEventListener('input', e => {
   const i = e.target.dataset && e.target.dataset.i; if (i == null) return;

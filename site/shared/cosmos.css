@@ -1,0 +1,112 @@
+/*
+ * Cosmos: the shared dark theme for the ML explainers.
+ * Load it AFTER a page's own <style> so these tokens and skin rules win.
+ * Performance: no backdrop-filter and no animated blur. The starfield moves with transform/opacity
+ * only (GPU-composited), and glows are static box-shadows, so it never costs animation frames.
+ */
+:root{
+  color-scheme: dark;
+  --bg:#04050d;
+  --surface:#0b0e20; --surface-2:#141938; --panel:rgba(12,15,34,.86);
+  --ink:#e9ecff; --muted:#8e97bd;
+  --line:rgba(140,160,255,.14); --line-strong:rgba(150,172,255,.34);
+  --accent:#6ee7ff; --accent-2:#a78bfa; --accent-3:#ff6fa8;
+  --accent-soft:rgba(110,231,255,.12); --on-accent:#04101a;
+  --pass:#4dffb4; --pass-soft:rgba(77,255,180,.14);
+  --fail:#ff5d8f; --fail-soft:rgba(255,93,143,.15);
+  --pos:#4dffb4;  --pos-soft:rgba(77,255,180,.14);
+  --neg:#ff5d8f;  --neg-soft:rgba(255,93,143,.15);
+  --shadow:inset 0 1px 0 rgba(255,255,255,.05),0 24px 60px rgba(0,0,0,.5);
+  --glow:0 0 24px rgba(110,231,255,.3);
+  --sans:'Space Grotesk',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+html{background:var(--bg)}
+body{background:transparent;color:var(--ink);min-height:100vh;position:relative}
+body::before{content:"";position:fixed;inset:0;z-index:-3;pointer-events:none;
+  background:
+    radial-gradient(1100px 700px at 88% -12%,rgba(130,90,255,.26),transparent 62%),
+    radial-gradient(900px 640px at -12% 108%,rgba(0,190,255,.17),transparent 60%),
+    radial-gradient(700px 500px at 55% 55%,rgba(255,70,160,.06),transparent 70%),
+    linear-gradient(180deg,#05061a,#03040b);}
+::selection{background:rgba(110,231,255,.35);color:#fff}
+
+/* starfield: two static tiled layers (painted once) plus a few tiny twinkling stars.
+   A moving full-screen layer halved the frame rate on software-composited machines, so only small dots animate. */
+.cosmos-stars{position:fixed;inset:0;z-index:-2;pointer-events:none;overflow:hidden}
+.cosmos-stars i{position:absolute;inset:0;background-size:360px 360px}
+.cosmos-stars .s1{opacity:.75;
+  background-image:
+    radial-gradient(1px 1px at 22px 41px,#fff,transparent 70%),radial-gradient(1px 1px at 117px 203px,#bfe6ff,transparent 70%),
+    radial-gradient(1.4px 1.4px at 301px 77px,#fff,transparent 70%),radial-gradient(1px 1px at 189px 311px,#d8c8ff,transparent 70%),
+    radial-gradient(1px 1px at 67px 268px,#fff,transparent 70%),radial-gradient(1px 1px at 251px 159px,#bfe6ff,transparent 70%),
+    radial-gradient(1.2px 1.2px at 333px 289px,#fff,transparent 70%),radial-gradient(1px 1px at 151px 97px,#fff,transparent 70%),
+    radial-gradient(1px 1px at 8px 180px,#ffd6ea,transparent 70%),radial-gradient(1px 1px at 214px 18px,#fff,transparent 70%);}
+.cosmos-stars .s2{background-size:520px 520px;opacity:.7;
+  background-image:
+    radial-gradient(1.8px 1.8px at 90px 120px,#fff,transparent 70%),radial-gradient(2px 2px at 400px 60px,#9fe9ff,transparent 70%),
+    radial-gradient(1.6px 1.6px at 260px 430px,#e2d4ff,transparent 70%),radial-gradient(2.2px 2.2px at 470px 330px,#fff,transparent 70%),
+    radial-gradient(1.5px 1.5px at 30px 470px,#ffc6e0,transparent 70%);}
+.cosmos-stars b{position:absolute;width:2.5px;height:2.5px;border-radius:50%;background:#fff;box-shadow:0 0 6px 1px rgba(160,220,255,.75);opacity:.2;animation:mlx-twinkle 3.6s ease-in-out infinite alternate}
+.cosmos-stars b:nth-child(3n){background:#e3d6ff;box-shadow:0 0 6px 1px rgba(190,160,255,.75);animation-duration:5.1s}
+.cosmos-stars b:nth-child(4n){background:#ffd9ea;box-shadow:0 0 6px 1px rgba(255,140,190,.6);animation-duration:4.3s}
+@keyframes mlx-twinkle{from{opacity:.12}to{opacity:1}}
+
+/* chrome */
+.brand h1{background:linear-gradient(90deg,#7df3ff 0%,#a78bfa 55%,#ff6fa8 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(130,150,255,.25))}
+.brand h1 span{color:inherit}
+.brand p{color:var(--muted)}
+.back{color:var(--accent)}
+.card{background:linear-gradient(180deg,rgba(18,22,50,.9),rgba(9,11,27,.92));border:1px solid var(--line);box-shadow:var(--shadow)}
+.stage{border-color:rgba(110,231,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 0 0 1px rgba(110,231,255,.04),0 0 90px rgba(80,120,255,.12),0 30px 70px rgba(0,0,0,.55)}
+.stage-h{border-bottom-color:var(--line)}
+.stage-b{background:
+  radial-gradient(ellipse at 50% 35%,rgba(70,90,230,.13),transparent 70%),
+  linear-gradient(rgba(110,231,255,.045) 1px,transparent 1px) 0 0/34px 34px,
+  linear-gradient(90deg,rgba(110,231,255,.045) 1px,transparent 1px) 0 0/34px 34px,
+  rgba(4,6,16,.55)}
+.btn{background:rgba(255,255,255,.035);border-color:rgba(140,160,255,.24);color:var(--ink);transition:transform .12s,box-shadow .2s,border-color .2s}
+.btn:hover:not(:disabled){border-color:var(--accent);box-shadow:0 0 0 1px rgba(110,231,255,.25),0 0 22px rgba(110,231,255,.22)}
+.btn.primary{background:linear-gradient(90deg,#4fd8ff,#8f7bff);border-color:transparent;color:#050817;box-shadow:0 0 26px rgba(110,170,255,.38)}
+.btn.primary:hover:not(:disabled){box-shadow:0 0 36px rgba(130,180,255,.6);filter:brightness(1.08)}
+.btn.on{color:var(--accent);border-color:rgba(110,231,255,.45);box-shadow:0 0 16px rgba(110,231,255,.15)}
+.steps li{background:rgba(255,255,255,.03);border-color:rgba(140,160,255,.16)}
+.steps li::before{background:rgba(255,255,255,.07)}
+.steps li.active{box-shadow:0 0 20px rgba(110,231,255,.28)}
+.steps li.done::before{color:#03140c}
+.kicker{color:var(--accent);text-shadow:0 0 12px rgba(110,231,255,.45)}
+
+/* table */
+th{border-bottom-color:rgba(150,172,255,.3)}
+td{border-bottom-color:rgba(140,160,255,.08)}
+tr.hl td{background:rgba(110,231,255,.1)}
+.pill.pass{box-shadow:0 0 10px rgba(77,255,180,.18)}
+.pill.fail{box-shadow:0 0 10px rgba(255,93,143,.18)}
+tr.newrow td{background:rgba(110,231,255,.06)}
+
+/* panels inside the control card */
+.nodehead,.info,.stat,.sc-kids>div,.cmp div,.params,.icard,.vs{background:rgba(255,255,255,.035)}
+.icard,.vs{border-color:var(--line)}
+.icard .num{box-shadow:0 0 14px rgba(110,231,255,.3)}
+.scard{background:rgba(255,255,255,.02)}
+.scard:hover{box-shadow:0 0 0 1px rgba(110,231,255,.3),0 0 26px rgba(110,231,255,.16)}
+.chip.on{box-shadow:0 0 12px rgba(110,231,255,.3)}
+.redbar i,.fbar i{background:linear-gradient(90deg,#4fd8ff,#a78bfa);box-shadow:0 0 10px rgba(110,200,255,.5)}
+.inputs input{background:rgba(255,255,255,.04)}
+.inputs input:focus{box-shadow:0 0 0 3px rgba(110,231,255,.18)}
+
+/* stage overlays */
+.cap,.count{background:rgba(10,13,32,.88);border-color:rgba(110,231,255,.22)}
+.count{color:var(--accent);text-shadow:0 0 14px rgba(110,231,255,.5)}
+.verdict{background:rgba(9,11,28,.94);border-color:rgba(110,231,255,.4);box-shadow:0 0 70px rgba(110,200,255,.28),0 30px 90px rgba(0,0,0,.65)}
+.verdict .vb{text-shadow:0 0 30px currentColor}
+
+/* tree SVG glows: a handful of nodes, so drop-shadow filters stay cheap */
+#treeSvg .node.open .box{filter:drop-shadow(0 0 6px rgba(110,231,255,.55))}
+#treeSvg .node.sel .box{filter:drop-shadow(0 0 10px rgba(110,231,255,.75))}
+#treeSvg .node.leaf.pass .box,#treeSvg .node.leaf.pos .box{filter:drop-shadow(0 0 6px rgba(77,255,180,.35))}
+#treeSvg .node.leaf.fail .box,#treeSvg .node.leaf.neg .box{filter:drop-shadow(0 0 6px rgba(255,93,143,.35))}
+#treeSvg .rule rect{filter:drop-shadow(0 0 5px rgba(110,231,255,.35))}
+#resChart{background:rgba(6,8,22,.7)}
+
+*{scrollbar-color:rgba(140,160,255,.3) transparent}
+@media (prefers-reduced-motion: reduce){.cosmos-stars b{animation:none;opacity:.6}}

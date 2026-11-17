@@ -11,7 +11,17 @@ Hands-on, animated explainers for teaching machine learning. Each one starts wit
 
 ## Layout
 
-Each explainer is one self-contained HTML file in `site/<name>/index.html`: no build step and no dependencies apart from Google Fonts. `site/index.html` is the gallery; add a new entry to its `EXPLAINERS` list when you add an explainer.
+Each explainer is one HTML file in `site/<name>/index.html`: no build step and no dependencies apart from Google Fonts. `site/index.html` is the gallery; add a new entry to its `EXPLAINERS` list when you add an explainer.
+
+Shared by every page, in `site/shared/`:
+
+| File | What it does |
+|---|---|
+| `cosmos.css` | The dark "cosmos" theme: colour tokens, nebula background, static starfield with a few twinkling stars, glowing panels and buttons. Load it after the page's own `<style>`. |
+| `sound.js` | `Sound`: generative ambient music (Web Audio, no audio files) with a hall reverb and ping-pong delay, plus effects tuned to the current chord. `Sound.mood('intro' / 'build' / 'forest' / 'predict')` sets how busy the music is; Music and Sound toggles are remembered per browser. |
+| `fx.js` | `FX`: canvas glow sprites and ball trails, drawn with additive blending instead of `shadowBlur` so hundreds of balls stay at 60 fps. |
+
+Keep animation cheap: nothing full-screen should move (a drifting full-screen starfield halved the frame rate on software-composited machines).
 
 ## Run and deploy
 

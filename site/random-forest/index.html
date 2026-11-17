@@ -8,30 +8,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#f3f0e8; --surface:#fffdf8; --surface-2:#f0ece2; --ink:#1b1c20; --muted:#6b6e76;
-  --line:#e0dacd; --line-strong:#b8b0a0;
-  --accent:#3454d1; --accent-soft:rgba(52,84,209,.12); --on-accent:#fff;
-  --pass:#12916a; --pass-soft:rgba(18,145,106,.16); --fail:#d4532e; --fail-soft:rgba(212,83,46,.16);
-  --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,25,10,.07);
-  --sans:'Space Grotesk',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#111215; --surface:#1a1c21; --surface-2:#22252b; --ink:#ecebe6; --muted:#979aa2;
-    --line:#2d3038; --line-strong:#4b505b;
-    --accent:#8099ff; --accent-soft:rgba(128,153,255,.16); --on-accent:#0d1020;
-    --pass:#3fd09d; --pass-soft:rgba(63,208,157,.18); --fail:#ff7b56; --fail-soft:rgba(255,123,86,.18);
-    --shadow:0 1px 2px rgba(0,0,0,.3);
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#111215; --surface:#1a1c21; --surface-2:#22252b; --ink:#ecebe6; --muted:#979aa2;
-  --line:#2d3038; --line-strong:#4b505b;
-  --accent:#8099ff; --accent-soft:rgba(128,153,255,.16); --on-accent:#0d1020;
-  --pass:#3fd09d; --pass-soft:rgba(63,208,157,.18); --fail:#ff7b56; --fail-soft:rgba(255,123,86,.18);
-  --shadow:0 1px 2px rgba(0,0,0,.3);
-}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
@@ -219,8 +195,10 @@ a.btn{text-decoration:none;display:inline-block}
 .verdict .vx{font-size:11px;color:var(--muted);margin-top:8px}
 @media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
+<link rel="stylesheet" href="../shared/cosmos.css">
 </head>
 <body>
+<div class="cosmos-stars" aria-hidden="true"><i class="s1"></i><i class="s2"></i></div>
 <header class="top">
   <div class="brand">
     <a class="back" href="../">← ML Explainers</a>
@@ -230,7 +208,8 @@ a.btn{text-decoration:none;display:inline-block}
   <ol class="steps" id="steps">
     <li data-s="data">Data</li><li data-s="boot">Bootstrap</li><li data-s="grow">Tree 1</li><li data-s="forest">Forest</li><li data-s="predict">Predict</li>
   </ol>
-  <button class="btn ghost" id="soundBtn" aria-pressed="true">Sound: on</button>
+  <button class="btn ghost" id="musicBtn" aria-pressed="true">♫ Music on</button>
+  <button class="btn ghost" id="soundBtn" aria-pressed="true">Sound on</button>
   <button class="btn ghost" id="resetBtn">Restart</button>
 </header>
 
@@ -262,6 +241,8 @@ a.btn{text-decoration:none;display:inline-block}
   </section>
 </main>
 
+<script src="../shared/sound.js"></script>
+<script src="../shared/fx.js"></script>
 <script>
 (() => {
 'use strict';
@@ -401,6 +382,7 @@ const TITLES = {
 };
 function setStage(st) {
   S.stage = st;
+  Sound.mood(st === 'data' || st === 'boot' ? 'intro' : st === 'grow' ? 'build' : st);
   const k = ORDER.indexOf(st);
   document.querySelectorAll('#steps li').forEach((li, i) => {
     li.classList.toggle('active', i === k); li.classList.toggle('done', i < k);
@@ -641,6 +623,7 @@ svg.addEventListener('click', e => {
   const g = e.target.closest('[data-id]'); if (!g) return;
   const n = nodeById(+g.dataset.id); if (!n) return;
   S.selected = S.selected === n && !isOpen(n) ? null : n;
+  Sound.select();
   renderSvg(); renderCtrl(); renderTable();
   if (window.innerWidth <= 900 && isOpen(n)) $('#ctrl').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
@@ -652,6 +635,7 @@ svg.addEventListener('mouseleave', () => { S.hover = null; renderTable(); });
 
 function afterSplit() {
   S.selected = null; S.hover = null;
+  if (!allNodes(S.root).some(isOpen)) setTimeout(() => Sound.complete(), 380);
   relayout(true); renderCtrl(); renderTable();
 }
 async function autoFinish() {
@@ -664,10 +648,11 @@ async function autoFinish() {
     while (!valid.length) { n.feats = pickFeats(); n.splits = n.feats.map(f => bestSplit(n.idx, f)); valid = n.splits.filter(Boolean); }
     renderSvg(); renderTable();
     await sleep(380);
-    applySplit(n, valid.reduce(better));
+    applySplit(n, valid.reduce(better)); Sound.split();
     S.selected = null; relayout(true); renderTable();
     await sleep(520);
   }
+  Sound.complete();
   S.busy = false; renderCtrl();
 }
 
@@ -678,15 +663,15 @@ async function runBootstrap() {
   S.boot = []; S.bootDone = false; setStage('boot');
   for (const d of draws) {
     await sleep(330);
-    S.boot.push(d); renderTable(d); renderCtrl();
+    S.boot.push(d); renderTable(d); renderCtrl(); Sound.tick(S.boot.length - 1);
   }
   await sleep(350);
-  S.bootDone = true; S.busy = false; renderTable(); renderCtrl();
+  S.bootDone = true; S.busy = false; renderTable(); renderCtrl(); Sound.add();
 }
 function plant() {
   S.root = makeNode(S.boot.slice(), 0, null);
   setStage('grow');
-  relayout(false);
+  relayout(false); Sound.select();
 }
 
 /* ---------------- canvas forest ---------------- */
@@ -717,9 +702,11 @@ function tween(dur, fn) {
 }
 function camTo(target, dur, extra) { const a = { ...S.cam }; return tween(dur, (e, t) => { S.cam = camLerp(a, target, e); if (extra) extra(e, t); }); }
 const binsH = () => S.binsK * clamp(CH * .3, 130, 200);
+let COLORS = null;
 function colors() {
+  if (COLORS) return COLORS;
   const cs = getComputedStyle(document.documentElement), g = k => cs.getPropertyValue(k).trim();
-  return { pass: g('--pass'), fail: g('--fail'), passS: g('--pass-soft'), failS: g('--fail-soft'), ink: g('--ink'), muted: g('--muted'),
+  return COLORS = { pass: g('--pass'), fail: g('--fail'), passS: g('--pass-soft'), failS: g('--fail-soft'), ink: g('--ink'), muted: g('--muted'),
     line: g('--line'), lineS: g('--line-strong'), surf: g('--surface'), surf2: g('--surface-2'), acc: g('--accent'), accS: g('--accent-soft') };
 }
 function rr(x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
@@ -828,88 +815,37 @@ function drawBins(bg, C) {
   ctx.globalAlpha = 1;
 }
 
-/* ---------------- sound (Web Audio, synthesized) ---------------- */
-const SND = { ctx: null, master: null, on: true, last: {} };
-try { SND.on = localStorage.getItem('rf-sound') !== 'off'; } catch (e) {}
-function audio() {
-  if (!SND.ctx) {
-    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
-    const c = new AC(), comp = c.createDynamicsCompressor(), m = c.createGain();
-    comp.threshold.value = -20; comp.ratio.value = 8; m.gain.value = .6;
-    m.connect(comp); comp.connect(c.destination);
-    SND.ctx = c; SND.master = m;
-  }
-  if (SND.ctx.state === 'suspended') SND.ctx.resume();
-  return SND.ctx;
-}
-function blip({ f, f2 = f, dur = .12, vol = .3, type = 'triangle', at = 0 }) {
-  const c = SND.ctx; if (!SND.on || !c || c.state !== 'running') return;
-  const t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
-  o.type = type; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f2, t + dur);
-  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .004); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
-  o.connect(g); g.connect(SND.master); o.start(t); o.stop(t + dur + .02);
-}
-function gate(key, ms) { const now = performance.now(); if (now - (SND.last[key] || 0) < ms) return false; SND.last[key] = now; return true; }
-const PENTA = [0, 2, 4, 7, 9];
-const note = (base, step) => base * Math.pow(2, (Math.floor(step / 5) * 12 + PENTA[((step % 5) + 5) % 5]) / 12);
+/* ---------------- sound: shared engine in ../shared/sound.js ---------------- */
+Sound.bindButtons({ music: '#musicBtn', sfx: '#soundBtn' });
 const lvlOf = b => b.ti === 0 ? 1 : b.ti <= 10 ? .6 : .28;
-const gapOf = lvl => lvl === 1 ? 0 : lvl > .5 ? 12 : 24;
-function sPeg(depth, lvl) {           // ball bounces off a node: bright pentatonic plink
-  if (!gate('peg', gapOf(lvl))) return;
-  const f = note(587, depth * 2 + Math.floor(Math.random() * 3));
-  blip({ f, f2: f * .94, dur: lvl === 1 ? .22 : .1, vol: .38 * lvl, type: 'triangle' });
-  blip({ f: f * 3.01, f2: f * 2.9, dur: .05, vol: .1 * lvl, type: 'sine' });
-}
-function sLeaf(cls, lvl) {            // lands in a leaf: soft wooden thunk
-  if (!gate('leaf', gapOf(lvl))) return;
-  const f = cls ? 196 : 262;
-  blip({ f, f2: f * .6, dur: lvl === 1 ? .3 : .13, vol: .45 * lvl, type: 'sine' });
-}
-function sWhoosh() { blip({ f: 260, f2: 900, dur: .4, vol: .06, type: 'sine' }); }
-function sLand(cls, k, lvl) {         // drops into a bin: glassy clink, rising as the bin fills
-  if (!gate('land' + cls, gapOf(lvl))) return;
-  const f = note(cls ? 330 : 440, Math.min(10, Math.floor(k / 45)));
-  blip({ f, f2: f * .98, dur: lvl === 1 ? .35 : .16, vol: .32 * Math.max(lvl, .45), type: 'sine' });
-  blip({ f: f * 2.76, f2: f * 2.7, dur: .08, vol: .12 * Math.max(lvl, .45), type: 'sine' });
-}
-function sVerdict(win) {
-  const ch = win ? [440, 523, 659, 880] : [523, 659, 784, 1047];
-  ch.forEach((f, i) => { blip({ f, dur: .9, vol: .22, type: 'triangle', at: i * .09 }); blip({ f: f * 2, dur: .5, vol: .05, type: 'sine', at: i * .09 }); });
-}
-function renderSoundBtn() { const b = $('#soundBtn'); b.textContent = SND.on ? 'Sound: on' : 'Sound: off'; b.setAttribute('aria-pressed', SND.on); }
-$('#soundBtn').addEventListener('click', () => {
-  SND.on = !SND.on; try { localStorage.setItem('rf-sound', SND.on ? 'on' : 'off'); } catch (e) {}
-  renderSoundBtn(); if (SND.on) { audio(); setTimeout(() => sPeg(1, 1), 30); }
-});
-renderSoundBtn();
 
 /* balls */
 function launch(ti, t0, seg, fly) {
   const tr = S.trees[ti], leaf = tr.path[tr.path.length - 1];
   S.balls.push({ ti, path: tr.path, cls: leaf.pred, t0, seg, fly, hold: Math.max(60, seg * .6), leafAt: false, landed: false, slot: -1 });
 }
-function ballState(b, now) {
+function ballState(b, now, pan) {
   const t = now - b.t0; if (t < 0) return null;
   const tr = S.trees[b.ti], segs = b.path.length, tDrop = segs * b.seg;
   if (t < tDrop) {
     const j = Math.floor(t / b.seg); tr.prog = j;
-    if (j >= 1 && j !== b.lastJ) sPeg(b.path[j - 1].depth, lvlOf(b));
+    if (j >= 1 && j !== b.lastJ) Sound.peg(b.path[j - 1].depth, lvlOf(b), pan);
     b.lastJ = j;
     return { ph: 'drop', j, u: (t - j * b.seg) / b.seg };
   }
   tr.prog = segs;
-  if (!b.leafAt) { b.leafAt = true; tr.vote = b.cls; b.slot = S.binNext[b.cls]++; sLeaf(b.cls, lvlOf(b)); }
+  if (!b.leafAt) { b.leafAt = true; tr.vote = b.cls; b.slot = S.binNext[b.cls]++; Sound.leaf(b.cls === 0, lvlOf(b), pan); }
   const tf = t - tDrop - b.hold;
   if (tf < 0) return { ph: 'hold' };
-  if (!b.flew) { b.flew = true; if (b.ti === 0) sWhoosh(); }
+  if (!b.flew) { b.flew = true; if (b.ti === 0) Sound.whoosh(pan); }
   if (tf < b.fly) return { ph: 'fly', u: tf / b.fly };
-  if (!b.landed) { b.landed = true; S.votes[b.cls]++; sLand(b.cls, b.slot, lvlOf(b)); }
+  if (!b.landed) { b.landed = true; S.votes[b.cls]++; Sound.land((b.cls ? 0 : 3) + Math.min(10, Math.floor(b.slot / 40)), lvlOf(b), b.cls ? .55 : -.55); }
   return { ph: 'land' };
 }
 function ballXY(b, st, V, bg) {
   const tr = S.trees[b.ti], c = cellScreen(b.ti, V), G = geo(tr, c);
   const big = c.sw > 360, rb = big ? 11 : clamp(c.sw * .045, 2.2, 9);
-  if (st.ph === 'land') { const T = slotPos(bg, b.cls, b.slot); return { x: T.x, y: T.y, r: bg.cell * .42 }; }
+  if (st.ph === 'land') { const T = slotPos(bg, b.cls, b.slot); return { x: T.x, y: T.y, r: bg.cell * .42, landed: true }; }
   const pts = b.path.map(n => ({ x: G.X(n), y: G.Y(n) }));
   if (st.ph === 'drop') {
     const A = st.j === 0 ? { x: pts[0].x, y: pts[0].y - Math.max(14, c.sh * .18) } : pts[st.j - 1], B = pts[st.j];
@@ -920,10 +856,9 @@ function ballXY(b, st, V, bg) {
   const T = slotPos(bg, b.cls, b.slot), u = ease(st.u);
   return { x: lerp(L.x, T.x, u), y: lerp(L.y, T.y, u) - Math.sin(Math.PI * st.u) * clamp(CH * .15, 50, 130), r: lerp(rb, bg.cell * .42, u) };
 }
-function drawBall(p, cls, C) {
-  ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-  ctx.fillStyle = p.neutral ? C.acc : (cls ? C.fail : C.pass); ctx.fill();
-  if (p.r > 3.5) { ctx.lineWidth = Math.min(2.5, p.r * .25); ctx.strokeStyle = C.surf; ctx.stroke(); }
+function drawBall(p, cls, C, b) {
+  const col = p.neutral ? C.acc : (cls ? C.fail : C.pass);
+  FX.ball(ctx, b, p, col, { trail: b && b.ti <= 10 && !p.landed, glow: !p.landed });
 }
 
 /* main canvas loop */
@@ -938,7 +873,8 @@ function draw() {
   if (!CW || !CH) return;
   const now = performance.now(), C = colors(), V = viewXf(), bg = binGeom();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, CW, CH);
-  const states = S.balls.map(b => ballState(b, now));
+  const panOf = i => { const c = cellScreen(i, V); return clamp((c.sx + c.sw / 2) / CW * 2 - 1, -.9, .9); };
+  const states = S.balls.map(b => ballState(b, now, panOf(b.ti)));
 
   ctx.save(); ctx.beginPath(); ctx.rect(0, 0, CW, CH - binsH()); ctx.clip();
   for (let i = 0; i < S.trees.length; i++) {
@@ -947,11 +883,11 @@ function draw() {
     if (c.sx > CW || c.sy > CH || c.sx + c.sw < 0 || c.sy + c.sh < 0) continue;
     drawCell(tr, i, c, C);
   }
-  S.balls.forEach((b, i) => { const st = states[i]; if (st && (st.ph === 'drop' || st.ph === 'hold')) drawBall(ballXY(b, st, V, bg), b.cls, C); });
+  S.balls.forEach((b, i) => { const st = states[i]; if (st && (st.ph === 'drop' || st.ph === 'hold')) drawBall(ballXY(b, st, V, bg), b.cls, C, b); });
   ctx.restore();
 
   drawBins(bg, C);
-  S.balls.forEach((b, i) => { const st = states[i]; if (st && (st.ph === 'fly' || st.ph === 'land')) drawBall(ballXY(b, st, V, bg), b.cls, C); });
+  S.balls.forEach((b, i) => { const st = states[i]; if (st && (st.ph === 'fly' || st.ph === 'land')) drawBall(ballXY(b, st, V, bg), b.cls, C, b); });
 
   // decision log for tree 1
   if (S.logTree && S.trees[0].path) {
@@ -998,7 +934,7 @@ async function runForest() {
   caption('Zooming out…');
   await camTo(CAM.block, 1100);
   for (let t = 1; t <= 10; t++) {
-    const tr = S.trees[t]; tr.appear = 1;
+    const tr = S.trees[t]; tr.appear = 1; Sound.pop(t, -.6 + (t % 4) * .4);
     caption(`Tree ${t + 1} · new bootstrap sample, 2 random features per split`);
     await tween(t === 1 ? 700 : 340, (e, u) => { tr.reveal = u * tr.order.length; });
     setCount(`${t + 1}<small>trees</small>`);
@@ -1008,13 +944,15 @@ async function runForest() {
   const rest = S.trees.slice(11);
   rest.forEach((tr, j) => { const p = POS[j + 11]; tr.d = (p.c + p.r * 1.2) / ((COLS - 1) + (ROWS - 1) * 1.2); });
   const c0 = { ...S.cam };
+  Sound.riser(3.8);
   await tween(3800, (e, t) => {
     S.cam = camLerp(c0, CAM.all, e);
     let shown = 11;
-    for (const tr of rest) {
+    rest.forEach((tr, j) => {
       const l = clamp((t - tr.d * .72) / .28, 0, 1);
       tr.appear = l > 0 ? 1 : 0; tr.reveal = l * tr.order.length; if (l > 0) shown++;
-    }
+      if (l > 0 && !tr.popped) { tr.popped = true; Sound.pop(j, POS[j + 11].c / COLS * 1.6 - .8); }
+    });
     setCount(`${shown}<small>trees</small>`);
   });
   caption(`${NTREES} trees · a random forest`);
@@ -1063,7 +1001,7 @@ async function runPredict() {
   const win = tie ? (Math.random() < .5 ? 0 : 1) : (v[0] > v[1] ? 0 : 1);
   S.verdict = { votes: v, win, tie, t1: S.trees[0].vote };
   S.newPred = win;
-  sVerdict(win);
+  Sound.verdict(win === 0);
   caption(`The forest has voted`);
   const tot = v[0] + v[1];
   $('#verdict').innerHTML = `<div class="vk">Forest prediction · mode of ${tot} votes</div>
@@ -1084,14 +1022,14 @@ $('#ctrl').addEventListener('click', e => {
   const act = b.dataset.act, n = S.selected;
   if (act === 'boot') runBootstrap();
   else if (act === 'plant') plant();
-  else if (act === 'split' && n && !S.busy) { applySplit(n, n.splits[n.feats.indexOf(+b.dataset.f)]); afterSplit(); }
-  else if (act === 'stop' && n && !S.busy) { n.stopped = true; afterSplit(); }
+  else if (act === 'split' && n && !S.busy) { applySplit(n, n.splits[n.feats.indexOf(+b.dataset.f)]); Sound.split(); afterSplit(); }
+  else if (act === 'stop' && n && !S.busy) { n.stopped = true; Sound.stop(); afterSplit(); }
   else if (act === 'redraw' && n) { n.feats = null; renderCtrl(); }
   else if (act === 'auto' && !S.busy) autoFinish();
   else if (act === 'forest' && !S.busy) runForest();
   else if (act === 'topredict' && !S.busy) toPredict();
-  else if (act === 'rand' && !S.busy) { randomInputs(); renderCtrl(); }
-  else if (act === 'drop') { audio(); runPredict(); }
+  else if (act === 'rand' && !S.busy) { randomInputs(); renderCtrl(); Sound.ui(); }
+  else if (act === 'drop') { Sound.unlock(); runPredict(); }
 });
 $('#ctrl').addEventListener('input', e => {
   const i = e.target.dataset && e.target.dataset.i; if (i == null) return;
