@@ -99,6 +99,8 @@ td.bag{font-weight:700;color:var(--accent)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .btn.ghost{background:transparent}
 a.btn{text-decoration:none;display:inline-block}
+.back{font:600 12px var(--sans);color:var(--accent);text-decoration:none}
+.back:hover{text-decoration:underline}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .draws{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 12px}
@@ -221,13 +223,13 @@ a.btn{text-decoration:none;display:inline-block}
 <body>
 <header class="top">
   <div class="brand">
+    <a class="back" href="../">← ML Explainers</a>
     <h1>Random Forest <span>by hand</span></h1>
     <p>Build one tree yourself, watch 499 more grow, then let them vote.</p>
   </div>
   <ol class="steps" id="steps">
     <li data-s="data">Data</li><li data-s="boot">Bootstrap</li><li data-s="grow">Tree 1</li><li data-s="forest">Forest</li><li data-s="predict">Predict</li>
   </ol>
-  <a class="btn ghost" href="../">← All explainers</a>
   <button class="btn ghost" id="soundBtn" aria-pressed="true">Sound: on</button>
   <button class="btn ghost" id="resetBtn">Restart</button>
 </header>

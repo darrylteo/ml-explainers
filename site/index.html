@@ -73,6 +73,9 @@ const EXPLAINERS = [
   { href: 'random-forest/', title: 'Random Forest by hand', thumb: 'forest',
     text: 'Bootstrap a sample, choose splits from 2 random features, grow 500 trees, then drop a new row through all of them plinko-style and take the mode.',
     tags: ['classification', 'bagging', 'Gini'] },
+  { href: 'xgboost/', title: 'XGBoost by hand', thumb: 'boost',
+    text: 'Start from the mean, build 3 trees on the residuals yourself, boost 97 more with the default settings, and watch an outlier get fitted. Predictions add up, plinko-style.',
+    tags: ['regression', 'boosting', 'residuals'] },
 ];
 document.getElementById('grid').innerHTML = EXPLAINERS.map(e => `
   <a class="card" href="${e.href}">

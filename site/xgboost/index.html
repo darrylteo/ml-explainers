@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XGBoost by Hand</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f3f0e8; --surface:#fffdf8; --surface-2:#f0ece2; --ink:#1b1c20; --muted:#6b6e76;
+  --line:#e0dacd; --line-strong:#b8b0a0;
+  --accent:#3454d1; --accent-soft:rgba(52,84,209,.12); --on-accent:#fff;
+  --pos:#12916a; --pos-soft:rgba(18,145,106,.16); --neg:#d4532e; --neg-soft:rgba(212,83,46,.16);
+  --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(30,25,10,.07);
+  --sans:'Space Grotesk',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111215; --surface:#1a1c21; --surface-2:#22252b; --ink:#ecebe6; --muted:#979aa2;
+    --line:#2d3038; --line-strong:#4b505b;
+    --accent:#8099ff; --accent-soft:rgba(128,153,255,.16); --on-accent:#0d1020;
+    --pos:#3fd09d; --pos-soft:rgba(63,208,157,.18); --neg:#ff7b56; --neg-soft:rgba(255,123,86,.18);
+    --shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111215; --surface:#1a1c21; --surface-2:#22252b; --ink:#ecebe6; --muted:#979aa2;
+  --line:#2d3038; --line-strong:#4b505b;
+  --accent:#8099ff; --accent-soft:rgba(128,153,255,.16); --on-accent:#0d1020;
+  --pos:#3fd09d; --pos-soft:rgba(63,208,157,.18); --neg:#ff7b56; --neg-soft:rgba(255,123,86,.18);
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+
+.top{display:flex;align-items:center;gap:14px;padding:14px 20px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:22px;letter-spacing:-.02em}
+.brand h1 span{color:var(--accent)}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.steps{display:flex;gap:6px;list-style:none;margin:0 0 0 auto;padding:0;flex-wrap:wrap;counter-reset:s}
+.steps li{font:600 12px var(--sans);padding:6px 11px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--surface);display:flex;align-items:center;gap:6px}
+.steps li::before{content:counter(s);counter-increment:s;font:700 10px var(--mono);width:17px;height:17px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2)}
+.steps li.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.steps li.active::before{background:var(--accent);color:var(--on-accent)}
+.steps li.done{color:var(--ink)}
+.steps li.done::before{content:"✓";background:var(--pos);color:#fff}
+
+.layout{display:grid;grid-template-columns:minmax(330px,450px) minmax(0,1fr);grid-template-areas:"table stage" "ctrl stage";grid-template-rows:auto 1fr;gap:14px;padding:0 20px 20px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);min-width:0}
+#tableCard{grid-area:table;padding:14px 14px 10px}
+#ctrl{grid-area:ctrl;padding:16px}
+.stage{grid-area:stage;position:sticky;top:14px;display:flex;flex-direction:column;height:calc(100vh - 96px);min-height:580px;overflow:hidden}
+@media (max-width:900px){
+  .top{padding:12px 16px}
+  .steps{margin-left:0}
+  .layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"table" "stage" "ctrl";padding:0 16px 16px}
+  .stage{position:relative;top:0;height:76vh;min-height:500px}
+}
+.card-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.card-h h2{margin:0;font-size:15px}
+.muted{color:var(--muted)} .small{font-size:12px}
+
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12.5px}
+th{font:600 11.5px var(--sans);color:var(--ink);text-align:right;padding:4px 5px 6px;border-bottom:1.5px solid var(--line-strong);white-space:nowrap;vertical-align:bottom}
+th small{display:block;font:400 10px var(--sans);color:var(--muted)}
+th.resp{color:var(--accent)}
+th:first-child{text-align:left}
+td{padding:5px 5px;text-align:right;border-bottom:1px solid var(--line);transition:opacity .25s,background-color .25s;white-space:nowrap}
+td.idx{color:var(--muted);text-align:left}
+td.y{font-weight:700}
+td.pred{color:var(--muted)}
+td.res{font-weight:700}
+.cpos{color:var(--pos)} .cneg{color:var(--neg)}
+tr.dim td{opacity:.28}
+tr.hl td{background:var(--accent-soft)}
+tr.flash td{animation:flash .34s ease-out}
+@keyframes flash{0%{background:var(--accent);color:var(--on-accent)}100%{background:transparent}}
+tr.outlier td.idx{color:var(--neg);font-weight:700}
+.otag{display:inline-block;margin-left:3px;font:700 9.5px var(--sans);color:#fff;background:var(--neg);border-radius:5px;padding:0 4px;vertical-align:1px}
+tr.newrow td{background:var(--surface-2);border-top:2px dashed var(--line-strong);font-weight:700}
+.tnote{font-size:12px;color:var(--muted);margin:8px 2px 0;line-height:1.45}
+
+.kicker{font:700 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+#ctrl h3{margin:0 0 6px;font-size:18px;letter-spacing:-.01em}
+#ctrl p{margin:0 0 12px;color:var(--muted);font-size:14px;line-height:1.5}
+#ctrl p b{color:var(--ink)}
+.btn{font:600 14px var(--sans);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);padding:9px 14px;border-radius:10px;cursor:pointer;transition:transform .12s,background .15s}
+.btn:hover:not(:disabled){transform:translateY(-1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.ghost{background:transparent}
+a.btn{text-decoration:none;display:inline-block}
+.back{font:600 12px var(--sans);color:var(--accent);text-decoration:none}
+.back:hover{text-decoration:underline}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.nodehead{font-size:13.5px;padding:10px 12px;background:var(--surface-2);border-radius:10px;margin-bottom:10px;line-height:1.55}
+.nodehead b{font-family:var(--mono)}
+.lbl{font:600 12px var(--sans);color:var(--muted);margin-bottom:8px}
+.cards{display:grid;gap:8px}
+.scard{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s}
+.scard:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:var(--shadow)}
+.scard.disabled{cursor:default;opacity:.62;padding:8px 12px}
+.scard.disabled:hover{transform:none;border-color:var(--line);box-shadow:none}
+.sc-head{display:flex;align-items:center;gap:8px}
+.sc-name{font-weight:700;font-size:15.5px}
+.sc-rule{font:600 13px var(--mono);color:var(--accent)}
+.sc-gain{margin-left:auto;font:600 12px var(--sans);color:var(--muted)}
+.sc-gain b{font:700 17px var(--mono);color:var(--accent);margin-left:4px}
+.tag{font:700 10px var(--sans);text-transform:uppercase;letter-spacing:.05em;background:var(--accent);color:var(--on-accent);padding:3px 7px;border-radius:99px}
+.strip{width:100%;height:auto;display:block;margin:4px 0 2px}
+.strip .dp{fill:var(--pos)} .strip .dn{fill:var(--neg)}
+.strip .ring{fill:none;stroke:var(--ink);stroke-width:1.5}
+.strip .axis{stroke:var(--line-strong)}
+.strip .thr{stroke:var(--accent);stroke-width:1.6;stroke-dasharray:3 3}
+.strip .zone{fill:var(--accent-soft)}
+.strip .tick{font:10px var(--mono);fill:var(--muted)}
+.strip .thr-t{fill:var(--accent);font-weight:700}
+.sc-kids{display:grid;grid-template-columns:1fr 1fr;gap:6px;font:500 11.5px var(--mono);margin:4px 0}
+.sc-kids>div{background:var(--surface-2);border-radius:8px;padding:5px 8px;line-height:1.45}
+.sc-kids .k{display:block;font:600 11px var(--sans);color:var(--muted)}
+.sc-calc{font:500 10.5px var(--mono);color:var(--muted);margin:4px 0 4px;overflow-wrap:anywhere}
+.redbar{height:6px;border-radius:9px;background:var(--surface-2);overflow:hidden}
+.redbar i{display:block;height:100%;background:var(--accent);border-radius:9px}
+.info{font-size:13.5px;line-height:1.5;padding:10px 12px;border-radius:10px;background:var(--surface-2);margin-bottom:10px}
+.info.warn{background:var(--neg-soft)}
+.info b{font-family:var(--mono)}
+.stats{display:flex;gap:8px;margin:6px 0 12px;flex-wrap:wrap}
+.stat{flex:1;min-width:90px;background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.stat b{display:block;font:700 17px var(--mono)}
+.stat span{font-size:11.5px;color:var(--muted)}
+.cmp{display:grid;gap:6px;margin:6px 0 12px}
+.cmp div{display:grid;grid-template-columns:1fr auto;gap:8px;font-size:13.5px;padding:7px 10px;border-radius:9px;background:var(--surface-2)}
+.cmp b{font-family:var(--mono)}
+.cmp .hi{background:var(--accent-soft)}
+.params{font:500 11.5px var(--mono);color:var(--muted);line-height:1.6;background:var(--surface-2);border-radius:10px;padding:8px 10px;margin:0 0 12px}
+.params b{color:var(--ink)}
+.inputs{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin:6px 0 4px}
+.inputs label{display:flex;flex-direction:column;gap:3px;font:600 12.5px var(--sans)}
+.inputs label small{font-weight:400;color:var(--muted)}
+.inputs input{font:600 15px var(--mono);padding:7px 9px;border-radius:9px;border:1.5px solid var(--line-strong);background:var(--surface);color:var(--ink);width:100%}
+.inputs input:focus{outline:none;border-color:var(--accent)}
+.result{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;display:grid;gap:6px}
+.r-row{display:flex;justify-content:space-between;font-size:13.5px}
+.r-row b{font-family:var(--mono)}
+.r-final{font-size:20px;font-weight:700;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:8px;margin-top:4px}
+.r-final b{font-family:var(--mono)}
+
+.stage-h{padding:14px 18px 10px;border-bottom:1px solid var(--line)}
+.stage-h h2{margin:0;font-size:17px;letter-spacing:-.01em}
+.stage-h p{margin:3px 0 0;font-size:13px;color:var(--muted)}
+.stage-b{position:relative;flex:1;min-height:0;background-image:radial-gradient(var(--line) 1px,transparent 1.2px);background-size:22px 22px}
+.stage-b>canvas,#intro,#treeWrap{position:absolute;inset:0;width:100%;height:100%;transition:opacity .5s}
+.hide{opacity:0;pointer-events:none}
+#intro{display:flex;flex-direction:column;justify-content:center;padding:24px;gap:16px;overflow:auto}
+.intro-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.icard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.icard .num{font:700 13px var(--mono);width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);margin-bottom:10px}
+.icard h3{margin:0 0 6px;font-size:16px}
+.icard p{margin:0;font-size:13.5px;line-height:1.5;color:var(--muted)}
+.vs{background:var(--surface);border:1px dashed var(--line-strong);border-radius:14px;padding:12px 16px;font-size:13.5px;line-height:1.55;color:var(--muted)}
+.vs b{color:var(--ink)}
+.formula{font:500 12.5px var(--mono);color:var(--muted);text-align:center;line-height:1.7}
+#treeWrap{display:flex;flex-direction:column}
+#treeSvg{flex:1;min-height:0;width:100%}
+#resChart{height:156px;width:100%;flex:none;border-top:1px solid var(--line);background:var(--surface)}
+
+#treeSvg text,#resChart text{font-family:var(--sans)}
+#treeSvg .edge{fill:none;stroke:var(--line-strong);stroke-width:1.6}
+#treeSvg .elab{font:600 11px var(--sans);fill:var(--muted);text-anchor:middle;paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round}
+#treeSvg .rule rect{fill:var(--surface);stroke:var(--accent);stroke-width:1.5}
+#treeSvg .rule text{font:700 12px var(--mono);fill:var(--accent);text-anchor:middle}
+#treeSvg .node{cursor:pointer}
+#treeSvg .node .box{fill:var(--surface);stroke:var(--line-strong);stroke-width:1.3;transition:fill .15s}
+#treeSvg .node:hover .box{fill:var(--surface-2)}
+#treeSvg .node.open .box{stroke:var(--accent);stroke-width:2;stroke-dasharray:6 4;animation:ants 1s linear infinite}
+#treeSvg .node.open:hover .box{fill:var(--accent-soft)}
+#treeSvg .node.leaf.pos .box{fill:var(--pos-soft);stroke:var(--pos);stroke-width:1.6}
+#treeSvg .node.leaf.neg .box{fill:var(--neg-soft);stroke:var(--neg);stroke-width:1.6}
+#treeSvg .node.sel .box{stroke:var(--accent);stroke-width:3.2;stroke-dasharray:none;animation:none}
+@keyframes ants{to{stroke-dashoffset:-20}}
+#treeSvg .t1{font:500 11px var(--mono);fill:var(--muted)}
+#treeSvg .t2{font:700 12.5px var(--mono);fill:var(--ink)}
+#treeSvg .t3{font:500 10.5px var(--mono);fill:var(--muted)}
+#treeSvg .tp{fill:var(--pos)} #treeSvg .tn{fill:var(--neg)}
+#treeSvg .mini{stroke:var(--line-strong)}
+#treeSvg .dp{fill:var(--pos)} #treeSvg .dn{fill:var(--neg)}
+#treeSvg .ring{fill:none;stroke:var(--ink);stroke-width:1.3}
+#treeSvg .hint{font:700 11px var(--sans);fill:var(--accent);text-anchor:middle}
+#treeSvg .onote{font:700 11px var(--sans);fill:var(--neg);text-anchor:middle}
+#resChart .zero{stroke:var(--line-strong)}
+#resChart .ghost{fill:none;stroke:var(--line-strong);stroke-dasharray:3 3}
+#resChart .bp{fill:var(--pos)} #resChart .bn{fill:var(--neg)}
+#resChart .dim{opacity:.22}
+#resChart .lab{font:500 10.5px var(--mono);fill:var(--muted);text-anchor:middle}
+#resChart .val{font:700 10.5px var(--mono);text-anchor:middle}
+#resChart .ttl{font:600 12px var(--sans);fill:var(--ink)}
+#resChart .sub{font:500 11.5px var(--mono);fill:var(--muted)}
+#resChart .olab{fill:var(--neg);font-weight:700}
+
+.ov{position:absolute;left:14px;top:12px;right:200px;pointer-events:none;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.cap{font:600 13px var(--sans);background:var(--surface);border:1px solid var(--line);padding:6px 11px;border-radius:9px;box-shadow:var(--shadow)}
+.cap:empty{display:none}
+.log{display:flex;flex-wrap:wrap;gap:4px;font:600 12px var(--mono)}
+.log span{background:var(--surface);border:1px solid var(--accent);color:var(--accent);padding:3px 8px;border-radius:7px;animation:pop .25s ease-out}
+.log span.lp{border-color:var(--pos);color:var(--pos);background:var(--pos-soft)}
+.log span.ln{border-color:var(--neg);color:var(--neg);background:var(--neg-soft)}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.count{position:absolute;right:14px;top:12px;font:700 22px var(--mono);background:var(--surface);border:1px solid var(--line);padding:5px 12px;border-radius:10px;box-shadow:var(--shadow);pointer-events:none}
+.count small{font:500 11px var(--sans);color:var(--muted);margin-left:6px}
+.count:empty{display:none}
+.verdict{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.85);opacity:0;transition:opacity .45s,transform .45s cubic-bezier(.2,1.4,.4,1);background:var(--surface);border:2px solid var(--line);border-radius:18px;padding:18px 28px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.18);pointer-events:none;min-width:250px}
+.verdict.show{opacity:1;transform:translate(-50%,-50%) scale(1);pointer-events:auto;cursor:pointer}
+.verdict .vk{font:700 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.verdict .vb{font:700 48px var(--mono);letter-spacing:-.02em;line-height:1.1;margin:6px 0;color:var(--accent)}
+.verdict .vs2{font:500 13px var(--mono);color:var(--muted)}
+.verdict .vx{font-size:11px;color:var(--muted);margin-top:8px}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <a class="back" href="../">← ML Explainers</a>
+    <h1>XGBoost <span>by hand</span></h1>
+    <p>Build 3 trees by hand, each fixing the last one's mistakes. Then boost 97 more.</p>
+  </div>
+  <ol class="steps" id="steps">
+    <li>Data</li><li>Tree 1</li><li>Tree 2</li><li>Tree 3</li><li>Boost</li><li>Predict</li>
+  </ol>
+  <button class="btn ghost" id="soundBtn" aria-pressed="true">Sound: on</button>
+  <button class="btn ghost" id="resetBtn">Restart</button>
+</header>
+
+<main class="layout">
+  <section class="card" id="tableCard">
+    <div class="card-h"><h2>Training data</h2><span class="muted small">10 rows · 5 features · 1 response</span></div>
+    <div class="tbl-wrap"><table id="tbl"></table></div>
+    <p class="tnote"><span class="otag">!</span> Row 7 is an <b>outlier</b>: strong on every feature, but scored 25 (sick on exam day). Residual = actual − predicted.</p>
+  </section>
+
+  <section class="card" id="ctrl"></section>
+
+  <section class="card stage">
+    <div class="stage-h"><h2 id="stTitle"></h2><p id="stSub"></p></div>
+    <div class="stage-b" id="stageB">
+      <div id="intro">
+        <div class="intro-grid">
+          <div class="icard"><div class="num">1</div><h3>Start with one guess</h3><p>Every student is predicted the <b>average</b> score, 55.4. The gap between actual and predicted is the <b>residual</b>.</p></div>
+          <div class="icard"><div class="num">2</div><h3>Fit a tree to the errors</h3><p>Each new tree is trained on the residuals the trees before it left behind. Rows with big errors dominate the split <b>gain</b>.</p></div>
+          <div class="icard"><div class="num">3</div><h3>Add it, shrunk</h3><p>The tree's output is multiplied by the learning rate <b>η = 0.3</b> and added on. Then repeat, 100 times in total.</p></div>
+        </div>
+        <div class="vs"><b>Unlike a random forest:</b> no bootstrap sample and no random features (XGBoost's defaults use every row and every feature), and the trees are <b>not independent</b>. Tree 2 can't be built until Tree 1 is finished, because it learns from Tree 1's mistakes.</div>
+        <div class="formula">leaf weight w = Σ residuals / (n + λ)  ·  Gain = ½ [ S<sub>L</sub>²/(n<sub>L</sub>+λ) + S<sub>R</sub>²/(n<sub>R</sub>+λ) − S²/(n+λ) ] − γ</div>
+      </div>
+      <div id="treeWrap" class="hide"><svg id="treeSvg"></svg><svg id="resChart"></svg></div>
+      <canvas id="cv" class="hide"></canvas>
+      <div class="ov"><div class="cap" id="cap"></div><div class="log" id="log"></div></div>
+      <div class="count" id="count"></div>
+      <div class="verdict" id="verdict"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const fmtT = v => Number.isInteger(v) ? String(v) : v.toFixed(1);
+const fmtS = (v, d = 1) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(d);
+const rint = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const sum = a => a.reduce((x, y) => x + y, 0);
+
+/* ---------------- data + XGBoost defaults ---------------- */
+const FEATS = [
+  { key: 'study',  name: 'Study',  unit: 'hrs/wk',  min: 1,  max: 16 },
+  { key: 'sleep',  name: 'Sleep',  unit: 'hrs',     min: 4,  max: 9 },
+  { key: 'attend', name: 'Attend', unit: '%',       min: 55, max: 100 },
+  { key: 'mock',   name: 'Mock',   unit: 'score',   min: 35, max: 80 },
+  { key: 'phone',  name: 'Phone',  unit: 'hrs/day', min: 0,  max: 8 },
+];
+const RAW = [
+  [12, 7, 95, 72, 2, 78],
+  [ 4, 5, 70, 45, 6, 42],
+  [ 8, 8, 88, 54, 5, 63],
+  [15, 7, 92, 62, 4, 70],
+  [ 3, 6, 85, 68, 2, 66],
+  [10, 6, 60, 50, 5, 51],
+  [ 6, 9, 90, 75, 1, 25],   // outlier: strong student, sick on exam day
+  [ 9, 5, 75, 40, 7, 38],
+  [14, 7, 72, 65, 3, 74],
+  [ 2, 6, 65, 52, 3, 47],
+];
+const X = RAW.map(r => r.slice(0, 5));
+const Y = RAW.map(r => r[5]);
+const N = 10, OUT = 6;
+// Python XGBRegressor defaults (xgboost >= 2.0, objective reg:squarederror)
+const ETA = 0.3, LAMBDA = 1, GAMMA = 0, MAXD = 6, MCW = 1, NROUNDS = 100, NHAND = 3;
+const BASE = sum(Y) / N;   // base_score is estimated from the data: the mean, for squared error
+const ALL = [...Array(N).keys()];
+
+/* ---------------- tree maths (squared error: gradient = −residual, hessian = 1) ---------------- */
+function bestSplit(idx, f, r) {
+  const vals = [...new Set(idx.map(i => X[i][f]))].sort((a, b) => a - b);
+  if (vals.length < 2) return null;
+  const s = sum(idx.map(i => r[i])), n = idx.length;
+  let best = null;
+  for (let k = 0; k < vals.length - 1; k++) {
+    const thr = (vals[k] + vals[k + 1]) / 2;
+    const L = idx.filter(i => X[i][f] <= thr), R = idx.filter(i => X[i][f] > thr);
+    if (L.length < MCW || R.length < MCW) continue;
+    const sL = sum(L.map(i => r[i])), sR = s - sL;
+    const gain = .5 * (sL * sL / (L.length + LAMBDA) + sR * sR / (R.length + LAMBDA) - s * s / (n + LAMBDA)) - GAMMA;
+    if (!best || gain > best.gain + 1e-12) best = { f, thr, L, R, sL, sR, s, n, gain, wL: sL / (L.length + LAMBDA), wR: sR / (R.length + LAMBDA) };
+  }
+  return best;
+}
+let NID = 0;
+function makeNode(idx, depth, parent, r) {
+  const s = sum(idx.map(i => r[i])), n = idx.length;
+  const node = { id: NID++, idx, n, s, w: s / (n + LAMBDA), depth, parent, r, left: null, right: null, f: null, thr: null, gain: 0, stopped: false };
+  node.splits = FEATS.map((_, f) => bestSplit(idx, f, r));
+  const valid = node.splits.filter(Boolean);
+  node.bestGain = valid.length ? Math.max(...valid.map(s => s.gain)) : -Infinity;
+  node.canSplit = depth < MAXD && n >= 2 && node.bestGain > 1e-9;
+  return node;
+}
+const isOpen = n => !n.left && !n.stopped && n.canSplit;
+function applySplit(n, s) {
+  n.f = s.f; n.thr = s.thr; n.gain = s.gain;
+  n.left = makeNode(s.L, n.depth + 1, n, n.r); n.right = makeNode(s.R, n.depth + 1, n, n.r);
+}
+function walk(n, fn) { fn(n); if (n.left) { walk(n.left, fn); walk(n.right, fn); } }
+function allNodes(r) { const a = []; walk(r, n => a.push(n)); return a; }
+const bestOf = n => n.splits.filter(s => s && s.gain > 1e-9).reduce((a, b) => (!a || b.gain > a.gain) ? b : a, null);
+function growAuto(r) {
+  const root = makeNode(ALL, 0, null, r), q = [root];
+  while (q.length) { const n = q.shift(); if (!n.canSplit) continue; applySplit(n, bestOf(n)); q.push(n.left, n.right); }
+  return root;
+}
+function leafOf(n, x) { while (n.left) n = x[n.f] <= n.thr ? n.left : n.right; return n; }
+function predictPath(root, x) { const p = [root]; let n = root; while (n.left) { n = x[n.f] <= n.thr ? n.left : n.right; p.push(n); } return p; }
+function layoutTree(root) {
+  let leaves = 0, maxD = 0;
+  (function rec(n) {
+    maxD = Math.max(maxD, n.depth);
+    if (!n.left) n.lx = leaves++;
+    else { rec(n.left); rec(n.right); n.lx = (n.left.lx + n.right.lx) / 2; }
+  })(root);
+  root.nLeaves = leaves; root.maxD = maxD;
+  const order = [], q = [root];
+  while (q.length) { const n = q.shift(); order.push(n); n.nx = (n.lx + .5) / leaves; n.ny = maxD ? n.depth / maxD : 0; if (n.left) q.push(n.left, n.right); }
+  root.order = order;
+  return root;
+}
+const rmse = F => Math.sqrt(sum(Y.map((y, i) => (y - F[i]) ** 2)) / N);
+const R0MAX = Math.max(...Y.map(y => Math.abs(y - BASE)));
+
+// For comparison: R randomForest regression defaults (ntree 500, mtry = floor(p/3) = 1, nodesize 5)
+function rfFitted() {
+  const grow = idx => {
+    const mean = sum(idx.map(i => Y[i])) / idx.length;
+    if (idx.length <= 5) return { m: mean };
+    const f = Math.floor(Math.random() * 5);
+    const vals = [...new Set(idx.map(i => X[i][f]))].sort((a, b) => a - b);
+    if (vals.length < 2) return { m: mean };
+    const sse = a => { const m = sum(a.map(i => Y[i])) / a.length; return sum(a.map(i => (Y[i] - m) ** 2)); };
+    let b = null;
+    for (let k = 0; k < vals.length - 1; k++) {
+      const t = (vals[k] + vals[k + 1]) / 2, L = idx.filter(i => X[i][f] <= t), R = idx.filter(i => X[i][f] > t), s = sse(L) + sse(R);
+      if (!b || s < b.s) b = { s, t, L, R };
+    }
+    return { f, t: b.t, l: grow(b.L), r: grow(b.R) };
+  };
+  const pred = (n, x) => n.l ? pred(x[n.f] <= n.t ? n.l : n.r, x) : n.m;
+  const P = Array(N).fill(0);
+  for (let t = 0; t < 500; t++) { const tr = grow(Array.from({ length: N }, () => Math.floor(Math.random() * N))); for (let i = 0; i < N; i++) P[i] += pred(tr, X[i]) / 500; }
+  return P;
+}
+
+/* ---------------- state ---------------- */
+const S = {
+  stage: 'data', round: 0, F: null, Fd: null, hist: [], trees: [], root: null, selected: null, hover: null, busy: false, added: false,
+  started: false, boostDone: false, rf: null, cam: { x: 0, y: 0, w: 1, h: .78 }, panelK: 0, balls: [], landed: [], total: 0,
+  newRow: null, newPred: null, inputs: null, verdict: null, canvasOn: false, logTree: false, logKey: '', shown: 0, contrib: null, cum: null,
+};
+
+/* ---------------- stage + chrome ---------------- */
+const TITLES = {
+  data:    ['How gradient boosting is built', 'Start from one guess, then add trees that fix the errors.'],
+  tree:    ['', 'Click a dashed leaf. XGBoost scores every feature; you pick the split.'],
+  boost:   ['Boosting the other 97 rounds', 'Same recipe, one tree after another. Watch the residuals shrink, especially row 7.'],
+  predict: ['Plinko prediction', 'The new row falls through every tree. Each leaf adds a small amount to the running total.'],
+};
+function stepIndex() { return S.stage === 'data' ? 0 : S.stage === 'tree' ? S.round : S.stage === 'boost' ? 4 : 5; }
+function setStage(st) {
+  S.stage = st;
+  const k = stepIndex();
+  document.querySelectorAll('#steps li').forEach((li, i) => { li.classList.toggle('active', i === k); li.classList.toggle('done', i < k); });
+  $('#stTitle').textContent = st === 'tree' ? `Tree ${S.round}: fit what the model still gets wrong` : TITLES[st][0];
+  $('#stSub').textContent = TITLES[st][1];
+  $('#intro').classList.toggle('hide', st !== 'data');
+  $('#treeWrap').classList.toggle('hide', st !== 'tree');
+  const canv = st === 'boost' || st === 'predict';
+  $('#cv').classList.toggle('hide', !canv);
+  if (canv && !S.canvasOn) { S.canvasOn = true; requestAnimationFrame(loop); }
+  if (!canv) S.canvasOn = false;
+  renderCtrl(); renderTable();
+}
+
+/* ---------------- table ---------------- */
+function renderTable(flashRow = -1) {
+  const focus = S.stage === 'tree' ? (S.hover || S.selected) : null;
+  const inNode = focus ? new Set(focus.idx) : null;
+  let h = '<thead><tr><th>#</th>' + FEATS.map(f => `<th>${f.name}<small>${f.unit}</small></th>`).join('') +
+    '<th class="resp">Exam<small>response</small></th><th>ŷ<small>predicted</small></th><th>Resid.<small>actual − ŷ</small></th></tr></thead><tbody>';
+  for (let i = 0; i < N; i++) {
+    const cls = [];
+    if (i === OUT) cls.push('outlier');
+    if (inNode) cls.push(inNode.has(i) ? 'hl' : 'dim');
+    if (i === flashRow) cls.push('flash');
+    const p = S.Fd ? S.Fd[i] : null, r = p == null ? null : Y[i] - p;
+    h += `<tr class="${cls.join(' ')}"><td class="idx">${i + 1}${i === OUT ? '<span class="otag">!</span>' : ''}</td>` + X[i].map(v => `<td>${v}</td>`).join('') +
+      `<td class="y">${Y[i]}</td><td class="pred">${p == null ? '–' : p.toFixed(1)}</td>` +
+      `<td class="res ${r == null ? '' : r >= 0 ? 'cpos' : 'cneg'}">${r == null ? '–' : fmtS(r)}</td></tr>`;
+  }
+  if (S.newRow) {
+    h += `<tr class="newrow"><td class="idx">new</td>` + S.newRow.map(v => `<td>${v}</td>`).join('') +
+      `<td class="y">?</td><td class="pred">${S.newPred == null ? '…' : S.newPred.toFixed(1)}</td><td></td></tr>`;
+  }
+  $('#tbl').innerHTML = h + '</tbody>';
+}
+
+/* ---------------- control panel ---------------- */
+const paramsHtml = `<div class="params">XGBRegressor defaults · <b>n_estimators</b> 100 · <b>learning_rate</b> η 0.3 · <b>max_depth</b> 6 · <b>reg_lambda</b> λ 1 · <b>gamma</b> γ 0 · <b>min_child_weight</b> 1 · <b>subsample</b> 1 · <b>colsample_bytree</b> 1 · objective reg:squarederror</div>`;
+function renderCtrl() {
+  const st = S.stage; let h = '';
+  if (st === 'data') {
+    h = `<div class="kicker">Step 0 · The first guess</div>
+      <h3>Predict the average for everyone</h3>
+      <p>Before any tree exists, XGBoost predicts the same number for every row: here the <b>mean exam score, ${BASE.toFixed(1)}</b> (since version 2.0 it estimates this <i>base score</i> from the data). Everything after that is a correction.</p>
+      ${paramsHtml}
+      ${S.started ? `<p>Row 7 has the biggest residual: <b class="cneg">${fmtS(Y[OUT] - BASE)}</b>. Watch what happens to it.</p><button class="btn primary" data-act="plant">Plant Tree 1 →</button>`
+        : `<button class="btn primary" data-act="start" ${S.busy ? 'disabled' : ''}>Predict ${BASE.toFixed(1)} for everyone</button>`}`;
+  } else if (st === 'tree') {
+    h = ctrlTree();
+  } else if (st === 'boost') {
+    h = `<div class="kicker">Step 4 · Boosting</div><h3>97 more rounds, one at a time</h3>
+      <p>Each round: compute residuals → grow a tree on them (best gain at every split) → add <b>0.3 ×</b> its leaf weights. Rounds can't run in parallel, because each one needs the previous predictions.</p>`;
+    if (S.boostDone) {
+      const F100 = Y.map((y, i) => y - S.hist[NROUNDS][i]), F3 = Y.map((y, i) => y - S.hist[NHAND][i]);
+      const avgLv = sum(S.trees.map(t => t.nLeaves)) / S.trees.length;
+      h += `<div class="stats"><div class="stat"><b>${NROUNDS}</b><span>trees</span></div><div class="stat"><b>${rmse(Array(N).fill(BASE)).toFixed(1)} → ${rmse(F100).toFixed(2)}</b><span>training RMSE</span></div><div class="stat"><b>${avgLv.toFixed(1)}</b><span>avg leaves</span></div></div>
+        <div class="lbl">Row 7, the outlier (actual 25)</div>
+        <div class="cmp">
+          <div><span>Base score</span><b>${BASE.toFixed(1)}</b></div>
+          <div><span>After your 3 trees</span><b>${F3[OUT].toFixed(1)}</b></div>
+          <div class="hi"><span>XGBoost, 100 trees</span><b>${F100[OUT].toFixed(1)}</b></div>
+          <div><span>Random forest, same 10 rows<sup>*</sup></span><b>${S.rf[OUT].toFixed(1)}</b></div>
+        </div>
+        <p><b>Why XGBoost fits it:</b> the trees are built in sequence. Whatever error is left over becomes the next tree's target, so row 7's large residual keeps pulling splits towards it (big S² → big gain) until it sits in its own leaf and is fitted. A random forest grows its trees independently on bootstrap samples and averages them, so row 7 gets averaged with its neighbours.</p>
+        <p class="small muted">* R randomForest regression defaults: 500 trees, mtry = 1, nodesize = 5; fitted value from predicting on the training rows. Remember the flip side: if 25 was a one-off (a sick day), XGBoost has memorised noise. That's why real projects tune η, max_depth and early stopping on held-out data.</p>
+        <button class="btn primary" data-act="topredict">Predict a new student →</button>`;
+    } else h += `<p class="muted">Boosting…</p>`;
+  } else if (st === 'predict') {
+    const dis = S.busy ? 'disabled' : '';
+    h = `<div class="kicker">Step 5 · Predict</div>
+      <h3>Drop a new student through the trees</h3>
+      <p>Type values or randomize. The row falls through all 100 trees; each leaf it lands in adds <b>η × w</b> to the running total, starting from the base score. Unlike a random forest there is no vote: the trees' outputs are <b>summed</b>.</p>
+      <div class="inputs">${FEATS.map((f, i) => `<label>${f.name} <small>${f.unit}</small><input type="number" data-i="${i}" value="${S.inputs[i]}" ${dis}></label>`).join('')}</div>
+      <div class="row"><button class="btn" data-act="rand" ${dis}>Randomize</button><button class="btn primary" data-act="drop" ${dis}>Drop it ↓</button></div>`;
+    if (S.verdict) {
+      const v = S.verdict;
+      h += `<div class="result">
+        <div class="r-row"><span>Base score</span><b>${BASE.toFixed(1)}</b></div>
+        <div class="r-row"><span>Tree 1 (yours)</span><b class="${v.c[0] >= 0 ? 'cpos' : 'cneg'}">${fmtS(v.c[0], 2)}</b></div>
+        <div class="r-row"><span>Trees 2–3 (yours)</span><b class="${v.c23 >= 0 ? 'cpos' : 'cneg'}">${fmtS(v.c23, 2)}</b></div>
+        <div class="r-row"><span>Trees 4–100</span><b class="${v.rest >= 0 ? 'cpos' : 'cneg'}">${fmtS(v.rest, 2)}</b></div>
+        <div class="r-final"><span>Prediction ŷ</span><b>${v.total.toFixed(1)}</b></div>
+      </div>`;
+    }
+  }
+  $('#ctrl').innerHTML = h;
+}
+
+function ctrlTree() {
+  const k = S.round, nodes = allNodes(S.root), open = nodes.filter(isOpen).length, n = S.selected;
+  const rOut = S.root.r[OUT];
+  let h = `<div class="kicker">Step ${k} · Tree ${k} of ${NHAND} by hand</div>`;
+  if (S.added) {
+    const before = S.hist[k - 1], after = S.hist[k];
+    return h + `<h3>Tree ${k} is in the model</h3>
+      <p>Every row moved by <b>0.3 × w</b> of the leaf it fell into.</p>
+      <div class="cmp"><div><span>Training RMSE</span><b>${rmse(Y.map((y, i) => y - before[i])).toFixed(2)} → ${rmse(Y.map((y, i) => y - after[i])).toFixed(2)}</b></div>
+      <div class="hi"><span>Row 7 residual</span><b>${fmtS(before[OUT])} → ${fmtS(after[OUT])}</b></div></div>
+      ${k < NHAND ? `<p>Tree ${k + 1} will be trained on these <b>new</b> residuals, so it depends on everything before it.</p><button class="btn primary" data-act="next">Plant Tree ${k + 1} →</button>`
+        : `<p>That's the idea. The algorithm now repeats it for the remaining ${NROUNDS - NHAND} rounds.</p><button class="btn primary" data-act="boost">Boost the other ${NROUNDS - NHAND} rounds →</button>`}`;
+  }
+  if (n && isOpen(n)) return h + splitChooser(n);
+  if (open === 0) {
+    layoutTree(S.root);
+    return h + `<h3>Tree ${k} is finished</h3>
+      <p>${S.root.nLeaves} leaves. No leaf can be improved (single row, max_depth reached, or no split with positive gain) or you stopped it. Each leaf's weight is <b>w = Σr / (n + 1)</b>.</p>
+      ${n ? nodeInfo(n) : ''}
+      <button class="btn primary" data-act="add" ${S.busy ? 'disabled' : ''}>Add Tree ${k} to the model →</button>`;
+  }
+  h += `<h3>Click a dashed leaf to split it</h3>
+    <p>${k === 1 ? 'Tree 1 is trained on the residuals of the base guess.' : `Tree ${k} is trained on the residuals left after tree${k > 2 ? 's 1–' + (k - 1) : ' 1'}, not on the exam scores.`} Row 7's residual is currently <b class="cneg">${fmtS(rOut)}</b>, the biggest in the table. Large residuals dominate the gain, so splits tend to separate them.</p>
+    ${n ? nodeInfo(n) : ''}
+    <p class="small muted">${open} leaf${open > 1 ? 's' : ''} can still be split · hover a node to see its rows and residuals</p>
+    <div class="row"><button class="btn" data-act="auto" ${S.busy ? 'disabled' : ''}>Auto-finish (best gain each time, as XGBoost does)</button></div>`;
+  return h;
+}
+function whyLeaf(n) {
+  if (n.stopped) return 'You stopped splitting here.';
+  if (n.n < 2) return 'It holds a single row.';
+  if (n.depth >= MAXD) return 'max_depth 6 reached.';
+  return 'No split has positive gain.';
+}
+function nodeInfo(n) {
+  if (n.left) return `<div class="info">Splits on <b>${FEATS[n.f].name} ≤ ${fmtT(n.thr)}</b> with gain <b>${n.gain.toFixed(1)}</b> (${n.n} rows, Σr ${fmtS(n.s)}).</div>`;
+  return `<div class="info${n.idx.includes(OUT) ? ' warn' : ''}">Leaf with <b>${n.n}</b> row${n.n > 1 ? 's' : ''} (${n.idx.map(i => '#' + (i + 1)).join(', ')}), Σr <b>${fmtS(n.s)}</b>. ${whyLeaf(n)}<br>
+    Weight w = ${fmtS(n.s)} / (${n.n} + 1) = <b>${fmtS(n.w, 2)}</b>, so each of these rows moves by η·w = <b>${fmtS(ETA * n.w, 2)}</b>.</div>`;
+}
+function splitChooser(n) {
+  const best = bestOf(n);
+  let h = `<div class="nodehead">Selected leaf: <b>${n.n}</b> rows · Σ residual <b>${fmtS(n.s)}</b> · weight now <b>${fmtS(n.w, 2)}</b></div>
+    <div class="lbl">XGBoost tries <b>every</b> feature (colsample_bytree = 1) and the best threshold for each. Gain = reduction in loss.</div>
+    <div class="cards">${FEATS.map((_, f) => splitCard(n, f, n.splits[f], best)).join('')}</div>
+    <div class="row"><button class="btn" data-act="stop">Stop here, make it a leaf (adds ${fmtS(ETA * n.w, 2)})</button></div>`;
+  return h;
+}
+function splitCard(n, f, s, best) {
+  const F = FEATS[f];
+  if (!s || s.gain <= 1e-9) return `<div class="scard disabled"><div class="sc-head"><span class="sc-name">${F.name}</span><span class="sc-gain">${s ? `best gain ${s.gain.toFixed(1)} ≤ 0` : 'one value only'}</span></div></div>`;
+  const isBest = best && s === best, t = fmtT(s.thr);
+  return `<button class="scard" data-act="split" data-f="${f}">
+    <div class="sc-head"><span class="sc-name">${F.name}</span><span class="sc-rule">≤ ${t}</span>${isBest ? '<span class="tag">best</span>' : ''}<span class="sc-gain">Gain<b>${s.gain.toFixed(1)}</b></span></div>
+    ${strip(n, f, s.thr)}
+    <div class="sc-kids">
+      <div><span class="k">yes · ≤ ${t}</span>n=${s.L.length} · Σr ${fmtS(s.sL)}<br>w ${fmtS(s.wL, 2)}</div>
+      <div><span class="k">no · &gt; ${t}</span>n=${s.R.length} · Σr ${fmtS(s.sR)}<br>w ${fmtS(s.wR, 2)}</div>
+    </div>
+    <div class="sc-calc">½[(${fmtS(s.sL)})²/${s.L.length + 1} + (${fmtS(s.sR)})²/${s.R.length + 1} − (${fmtS(s.s)})²/${s.n + 1}]</div>
+    <div class="redbar"><i style="width:${best ? s.gain / best.gain * 100 : 0}%"></i></div>
+  </button>`;
+}
+function strip(n, f, thr) {
+  const F = FEATS[f], W = 300, H = 70, x0 = 14, x1 = W - 14, y0 = 30, sc = 24 / R0MAX;
+  const sx = v => x0 + (v - F.min) / (F.max - F.min) * (x1 - x0), tx = sx(thr);
+  let dots = '';
+  for (const i of n.idx) {
+    const r = n.r[i], cx = sx(X[i][f]), cy = y0 - r * sc;
+    dots += `<line x1="${cx}" x2="${cx}" y1="${y0}" y2="${cy}" class="axis"/><circle cx="${cx}" cy="${cy}" r="4" class="${r >= 0 ? 'dp' : 'dn'}"/>`;
+    if (i === OUT) dots += `<circle cx="${cx}" cy="${cy}" r="7" class="ring"/>`;
+  }
+  return `<svg class="strip" viewBox="0 0 ${W} ${H}">
+    <rect x="${x0}" y="2" width="${tx - x0}" height="${H - 18}" class="zone" rx="3"/>
+    <line x1="${x0}" x2="${x1}" y1="${y0}" y2="${y0}" class="axis"/>
+    ${dots}
+    <line x1="${tx}" x2="${tx}" y1="0" y2="${H - 14}" class="thr"/>
+    <text x="${x0}" y="${H - 3}" class="tick">${F.min}</text><text x="${x1}" y="${H - 3}" text-anchor="end" class="tick">${F.max}</text>
+    <text x="${tx}" y="${H - 3}" text-anchor="middle" class="tick thr-t">${fmtT(thr)}</text>
+  </svg>`;
+}
+
+/* ---------------- SVG tree (hand-built) ---------------- */
+const svg = $('#treeSvg'), res = $('#resChart');
+const NW = 142, NH = 66, SLOT = 160, LEVEL = 144;
+let world = { s: 1, ox: 0, oy: 0 }, svgRaf = 0;
+function svgTargets() {
+  layoutTree(S.root);
+  const nodes = allNodes(S.root);
+  nodes.forEach(n => { n.tx = n.lx * SLOT + SLOT / 2; n.ty = n.depth * LEVEL + NH / 2; });
+  const r = svg.getBoundingClientRect(), W = r.width, H = r.height;
+  const bw = S.root.nLeaves * SLOT, bh = S.root.maxD * LEVEL + NH + 30;
+  const s = Math.min(1.1, (W - 20) / bw, (H - 26) / bh);
+  return { nodes, W, H, w: { s, ox: (W - bw * s) / 2, oy: 14 + Math.max(0, H - bh * s - 28) * .3 } };
+}
+function relayout(anim = true) {
+  if (!S.root || S.stage !== 'tree') return;
+  const T = svgTargets();
+  svg.setAttribute('viewBox', `0 0 ${T.W} ${T.H}`);
+  T.nodes.forEach(n => {
+    if (n.cx == null) { const p = n.parent; n.cx = p ? p.cx : n.tx; n.cy = p ? p.cy : n.ty; n.alpha = 0; }
+    n.fx = n.cx; n.fy = n.cy; n.fa = n.alpha;
+  });
+  cancelAnimationFrame(svgRaf);
+  if (!anim) { T.nodes.forEach(n => { n.cx = n.tx; n.cy = n.ty; n.alpha = 1; }); world = T.w; renderSvg(); return; }
+  const w0 = { ...world }, t0 = performance.now(), D = 600;
+  const step = now => {
+    const t = clamp((now - t0) / D, 0, 1), e = ease(t);
+    T.nodes.forEach(n => { n.cx = lerp(n.fx, n.tx, e); n.cy = lerp(n.fy, n.ty, e); n.alpha = lerp(n.fa, 1, e); });
+    world = { s: lerp(w0.s, T.w.s, e), ox: lerp(w0.ox, T.w.ox, e), oy: lerp(w0.oy, T.w.oy, e) };
+    renderSvg();
+    if (t < 1) svgRaf = requestAnimationFrame(step);
+  };
+  svgRaf = requestAnimationFrame(step);
+}
+function renderSvg() {
+  const nodes = allNodes(S.root);
+  let E = '', R = '', Nd = '';
+  for (const n of nodes) {
+    if (n.left) {
+      const py = n.cy + NH / 2, ry = py + 18;
+      const txt = `${FEATS[n.f].name} ≤ ${fmtT(n.thr)}`, rw = txt.length * 7.3 + 20;
+      for (const [c, lab] of [[n.left, 'yes'], [n.right, 'no']]) {
+        const x1 = n.cx, y1 = ry + 12, x2 = c.cx, y2 = c.cy - NH / 2, my = (y1 + y2) / 2;
+        E += `<path class="edge" d="M${x1} ${y1}C${x1} ${my} ${x2} ${my} ${x2} ${y2}" opacity="${c.alpha}"/>
+          <text class="elab" x="${(x1 + x2) / 2}" y="${my + 4}" opacity="${c.alpha}">${lab}</text>`;
+      }
+      R += `<g class="rule" opacity="${n.left.alpha}"><line class="edge" x1="${n.cx}" x2="${n.cx}" y1="${py}" y2="${ry - 12}"/>
+        <rect x="${n.cx - rw / 2}" y="${ry - 12}" width="${rw}" height="24" rx="12"/><text x="${n.cx}" y="${ry + 4}">${txt}</text></g>`;
+    }
+    const open = isOpen(n), term = !n.left && !open;
+    const cls = ['node', open ? 'open' : '', term ? 'leaf ' + (n.w >= 0 ? 'pos' : 'neg') : '', S.selected === n ? 'sel' : ''].join(' ');
+    // mini residual strip
+    const mx0 = 12, mx1 = NW - 12, mc = (mx0 + mx1) / 2, my = 32;
+    let mini = `<line class="mini" x1="${mx0}" x2="${mx1}" y1="${my}" y2="${my}"/><line class="mini" x1="${mc}" x2="${mc}" y1="${my - 4}" y2="${my + 4}"/>`;
+    for (const i of n.idx) {
+      const x = mc + clamp(n.r[i] / R0MAX, -1, 1) * (mx1 - mc);
+      mini += `<circle cx="${x}" cy="${my}" r="3.6" class="${n.r[i] >= 0 ? 'dp' : 'dn'}"/>`;
+      if (i === OUT) mini += `<circle cx="${x}" cy="${my}" r="6.2" class="ring"/>`;
+    }
+    const line = term
+      ? `<tspan class="${n.w >= 0 ? 'tp' : 'tn'}">adds ${fmtS(ETA * n.w, 2)}</tspan>`
+      : `<tspan>w ${fmtS(n.w, 2)}</tspan>`;
+    const isoOut = term && n.idx.includes(OUT) && n.n <= 2;
+    Nd += `<g class="${cls}" data-id="${n.id}" transform="translate(${n.cx - NW / 2} ${n.cy - NH / 2})" opacity="${n.alpha}">
+      <rect class="box" width="${NW}" height="${NH}" rx="12"/>
+      <text class="t1" x="12" y="18">n=${n.n}</text><text class="t1" x="${NW - 12}" y="18" text-anchor="end">Σr ${fmtS(n.s)}</text>
+      ${mini}
+      <text class="t2" x="12" y="56">${line}</text>
+      ${open ? `<text class="hint" x="${NW / 2}" y="${NH + 17}">${S.selected === n ? 'choose a feature ←' : 'click to split'}</text>` : ''}
+      ${isoOut ? `<text class="onote" x="${NW / 2}" y="${NH + 17}">row 7 isolated</text>` : ''}
+    </g>`;
+  }
+  svg.innerHTML = `<g transform="translate(${world.ox} ${world.oy}) scale(${world.s})">${E}${R}${Nd}</g>`;
+}
+function renderRes() {
+  if (S.stage !== 'tree' || !S.Fd) return;
+  const r = res.getBoundingClientRect(), W = r.width, H = r.height;
+  if (W < 120 || H < 60) return;
+  res.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const focus = S.hover || S.selected, inNode = focus ? new Set(focus.idx) : null;
+  const pl = 18, pr = 18, top = 34, bot = 36, y0 = top + (H - top - bot) / 2, sc = (H - top - bot) / 2 / R0MAX;
+  const bw = (W - pl - pr) / N;
+  const cur = Y.map((y, i) => y - S.Fd[i]), r0 = S.hist[0];
+  let g = `<text class="ttl" x="${pl}" y="18">Residuals after ${S.round - 1 + (S.added ? 1 : 0)} tree${S.round - 1 + (S.added ? 1 : 0) === 1 ? '' : 's'}</text>
+    <text class="sub" x="${W - pr}" y="18" text-anchor="end">RMSE ${rmse(S.Fd).toFixed(2)} · dashed = start</text>
+    <line class="zero" x1="${pl}" x2="${W - pr}" y1="${y0}" y2="${y0}"/>`;
+  for (let i = 0; i < N; i++) {
+    const cx = pl + bw * (i + .5), w = Math.min(34, bw * .56), v = cur[i], h0 = r0[i] * sc, h = v * sc, dim = inNode && !inNode.has(i) ? ' dim' : '';
+    g += `<rect class="ghost${dim}" x="${cx - w / 2}" y="${Math.min(y0, y0 - h0)}" width="${w}" height="${Math.abs(h0)}"/>`;
+    g += `<rect class="${v >= 0 ? 'bp' : 'bn'}${dim}" x="${cx - w / 2 + 3}" y="${Math.min(y0, y0 - h)}" width="${w - 6}" height="${Math.max(.5, Math.abs(h))}" rx="2"/>`;
+    g += `<text class="val ${v >= 0 ? 'cpos' : 'cneg'}${dim}" x="${cx}" y="${v >= 0 ? y0 - Math.abs(h) - 4 : y0 + Math.abs(h) + 11}" style="fill:currentColor">${fmtS(v)}</text>`;
+    g += `<text class="lab${i === OUT ? ' olab' : ''}${dim}" x="${cx}" y="${H - 6}">#${i + 1}${i === OUT ? ' !' : ''}</text>`;
+  }
+  res.innerHTML = g;
+}
+const nodeById = id => S.root && allNodes(S.root).find(n => n.id === id);
+svg.addEventListener('click', e => {
+  if (S.busy || S.added) return;
+  const g = e.target.closest('[data-id]'); if (!g) return;
+  const n = nodeById(+g.dataset.id); if (!n) return;
+  S.selected = S.selected === n && !isOpen(n) ? null : n;
+  renderSvg(); renderCtrl(); renderTable(); renderRes();
+  if (window.innerWidth <= 900 && isOpen(n)) $('#ctrl').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+svg.addEventListener('mouseover', e => {
+  const g = e.target.closest('[data-id]'); const n = g ? nodeById(+g.dataset.id) : null;
+  if (n !== S.hover) { S.hover = n; renderTable(); renderRes(); }
+});
+svg.addEventListener('mouseleave', () => { S.hover = null; renderTable(); renderRes(); });
+
+function afterSplit() { S.selected = null; S.hover = null; relayout(true); renderCtrl(); renderTable(); renderRes(); }
+async function autoFinish() {
+  S.busy = true; renderCtrl();
+  let n;
+  while ((n = allNodes(S.root).find(isOpen))) {
+    S.selected = n; renderSvg(); renderTable(); renderRes();
+    await sleep(320);
+    applySplit(n, bestOf(n));
+    S.selected = null; relayout(true); renderTable(); renderRes();
+    await sleep(480);
+  }
+  S.busy = false; renderCtrl();
+}
+
+/* ---------------- step 0 + per-tree flow ---------------- */
+async function startBase() {
+  if (S.busy) return; S.busy = true; renderCtrl();
+  S.F = Array(N).fill(BASE); S.hist = [Y.map(y => y - BASE)];
+  S.Fd = Array(N).fill(null);
+  for (let i = 0; i < N; i++) { await sleep(130); S.Fd[i] = BASE; renderTable(i); }
+  S.Fd = S.F.slice(); S.started = true; S.busy = false; renderTable(); renderCtrl();
+}
+function plantTree(k) {
+  S.round = k; S.added = false; S.selected = null; S.hover = null;
+  const r = Y.map((y, i) => y - S.F[i]);
+  S.root = makeNode(ALL, 0, null, r);
+  setStage('tree');
+  relayout(false); renderRes();
+}
+async function addTree() {
+  if (S.busy) return; S.busy = true; renderCtrl();
+  const tr = layoutTree(S.root);
+  S.trees.push(tr);
+  const old = S.F.slice(), nw = S.F.map((f, i) => f + ETA * leafOf(tr, X[i]).w);
+  S.hist.push(Y.map((y, i) => y - nw[i]));
+  S.added = true; S.selected = null; renderSvg();
+  await tween(1200, e => { S.Fd = old.map((o, i) => lerp(o, nw[i], e)); renderTable(); renderRes(); });
+  S.F = nw; S.Fd = nw.slice(); S.busy = false; renderTable(); renderRes(); renderCtrl();
+}
+
+/* ---------------- canvas: the ensemble ---------------- */
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let CW = 0, CH = 0, DPR = 1;
+const CELLW = 1, CELLH = .6, COLS = 10, ROWS = 10;
+const POS = (() => {
+  const p = [];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) p.push({ c, r });
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) { if (r < 3 && c < 4) continue; p.push({ c, r }); }
+  return p;
+})();
+const CAM = {
+  tree1: { x: 0, y: 0, w: CELLW, h: CELLH },
+  row3:  { x: -.03, y: -.03, w: 3 * CELLW + .06, h: CELLH + .06 },
+  block: { x: -.04, y: -.04, w: 4 * CELLW + .08, h: 3 * CELLH + .08 },
+  all:   { x: -.08, y: -.08, w: COLS * CELLW + .16, h: ROWS * CELLH + .16 },
+};
+function camLerp(a, b, e) {
+  return { x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e), w: Math.exp(lerp(Math.log(a.w), Math.log(b.w), e)), h: Math.exp(lerp(Math.log(a.h), Math.log(b.h), e)) };
+}
+function tween(dur, fn) {
+  return new Promise(res => {
+    const t0 = performance.now();
+    const st = now => { const t = clamp((now - t0) / dur, 0, 1); fn(ease(t), t); t < 1 ? requestAnimationFrame(st) : res(); };
+    requestAnimationFrame(st);
+  });
+}
+function camTo(target, dur, extra) { const a = { ...S.cam }; return tween(dur, (e, t) => { S.cam = camLerp(a, target, e); if (extra) extra(e, t); }); }
+const panelH = () => S.panelK * clamp(CH * .33, 150, 230);
+function colors() {
+  const cs = getComputedStyle(document.documentElement), g = k => cs.getPropertyValue(k).trim();
+  return { pos: g('--pos'), neg: g('--neg'), posS: g('--pos-soft'), negS: g('--neg-soft'), ink: g('--ink'), muted: g('--muted'),
+    line: g('--line'), lineS: g('--line-strong'), surf: g('--surface'), surf2: g('--surface-2'), acc: g('--accent'), accS: g('--accent-soft') };
+}
+function rr(x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
+function viewXf() {
+  const PH = panelH(), top = S.logTree ? 84 : 54, A = { x: 10, y: top, w: CW - 20, h: Math.max(60, CH - PH - top - 8) };
+  const k = Math.min(A.w / S.cam.w, A.h / S.cam.h);
+  return { A, k, ox: A.x + (A.w - S.cam.w * k) / 2 - S.cam.x * k, oy: A.y + (A.h - S.cam.h * k) / 2 - S.cam.y * k };
+}
+function cellScreen(i, V) { const p = POS[i]; return { sx: p.c * CELLW * V.k + V.ox, sy: p.r * CELLH * V.k + V.oy, sw: CELLW * V.k, sh: CELLH * V.k }; }
+function geo(tr, c) {
+  const g = c.sw * .04, x0 = c.sx + g, y0 = c.sy + g, w = c.sw - 2 * g, h = c.sh - 2 * g;
+  const px = w * .07, top = h * .22, bot = h * .13;
+  return { x0, y0, w, h, X: n => x0 + px + n.nx * (w - 2 * px), Y: n => tr.maxD ? y0 + top + n.ny * (h - top - bot) : y0 + h * .5, slot: (w - 2 * px) / tr.nLeaves };
+}
+function drawCell(tr, i, c, C) {
+  const g = c.sw * .04, x = c.sx + g, y = c.sy + g, w = c.sw - 2 * g, h = c.sh - 2 * g;
+  rr(x, y, w, h, Math.min(12, c.sw * .06)); ctx.fillStyle = C.surf; ctx.fill();
+  if (tr.used) { ctx.globalAlpha = .13; ctx.fillStyle = C.acc; ctx.fill(); ctx.globalAlpha = 1; }
+  if (c.sw > 14) { ctx.strokeStyle = i < NHAND ? C.acc : C.line; ctx.lineWidth = i < NHAND ? clamp(c.sw * .008, 1.2, 2.5) : 1; ctx.stroke(); }
+  if (c.sw > 95) {
+    const fs = clamp(c.sw * .045, 9, 15);
+    ctx.font = `600 ${fs}px 'Space Grotesk', sans-serif`; ctx.fillStyle = i < NHAND ? C.acc : C.muted; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`Tree ${i + 1}${i < NHAND ? (c.sw > 300 ? ' · built by you' : ' (yours)') : ''}`, x + fs * .7, y + fs * 1.5);
+  }
+  drawTree(tr, c, C);
+}
+function drawTree(tr, c, C) {
+  const G = geo(tr, c), ord = tr.order, rev = tr.reveal;
+  const det = clamp((c.sw - 360) / 180, 0, 1);
+  const onPath = tr.path ? new Set(tr.path.slice(0, tr.prog)) : null;
+  const lw = clamp(c.sw * .006, .6, 2);
+  for (let k = 1; k < ord.length; k++) {
+    const n = ord[k], a = clamp(rev - k, 0, 1); if (a <= 0) break;
+    const p = n.parent, hot = onPath && onPath.has(n);
+    ctx.globalAlpha = a; ctx.strokeStyle = hot ? C.acc : C.lineS; ctx.lineWidth = hot ? lw * 2.4 : lw;
+    ctx.beginPath(); ctx.moveTo(G.X(p), G.Y(p)); ctx.lineTo(G.X(n), G.Y(n)); ctx.stroke();
+    if (det > 0) {
+      ctx.globalAlpha = a * det; ctx.font = `600 11px 'Space Grotesk', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const mx = (G.X(p) + G.X(n)) / 2, my = (G.Y(p) + G.Y(n)) / 2, lab = n === p.left ? 'yes' : 'no';
+      ctx.lineWidth = 4; ctx.strokeStyle = C.surf; ctx.strokeText(lab, mx, my);
+      ctx.fillStyle = hot ? C.acc : C.muted; ctx.fillText(lab, mx, my);
+    }
+  }
+  if (det < 1) {
+    const r = clamp(Math.min(G.slot * .2, G.h * .05), .8, 7);
+    for (let k = 0; k < ord.length; k++) {
+      const n = ord[k], a = clamp(rev - k, 0, 1); if (a <= 0) break;
+      ctx.globalAlpha = a * (1 - det);
+      ctx.beginPath(); ctx.arc(G.X(n), G.Y(n), r, 0, Math.PI * 2);
+      ctx.fillStyle = n.left ? C.muted : (n.w >= 0 ? C.pos : C.neg); ctx.fill();
+      if (onPath && onPath.has(n) && r > 1.5) { ctx.strokeStyle = C.acc; ctx.lineWidth = Math.max(1, r * .45); ctx.stroke(); }
+    }
+  }
+  if (det > 0) {
+    const bw = Math.min(150, G.slot * .94), bh = clamp(G.h * .11, 30, 50), fs = clamp(bw * .12, 8.5, 13.5), two = bw > 84;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let k = 0; k < ord.length; k++) {
+      const n = ord[k], a = clamp(rev - k, 0, 1); if (a <= 0) break;
+      const x = G.X(n), y = G.Y(n), leaf = !n.left, hot = onPath && onPath.has(n), col = n.w >= 0 ? C.pos : C.neg;
+      ctx.globalAlpha = a * det;
+      rr(x - bw / 2, y - bh / 2, bw, bh, 9); ctx.fillStyle = C.surf; ctx.fill();
+      if (leaf) { ctx.fillStyle = n.w >= 0 ? C.posS : C.negS; ctx.fill(); }
+      ctx.strokeStyle = hot ? C.acc : leaf ? col : C.lineS; ctx.lineWidth = hot ? 3 : 1.3; ctx.stroke();
+      ctx.font = `700 ${fs}px 'JetBrains Mono', monospace`;
+      ctx.fillStyle = leaf ? col : C.ink;
+      ctx.fillText(leaf ? fmtS(ETA * n.w, 2) : `${FEATS[n.f].name}≤${fmtT(n.thr)}`, x, two ? y - fs * .45 : y);
+      if (two) {
+        ctx.font = `500 ${fs * .8}px 'JetBrains Mono', monospace`; ctx.fillStyle = C.muted;
+        ctx.fillText(leaf ? `n=${n.n} · w ${fmtS(n.w, 1)}` : `n=${n.n} · gain ${n.gain.toFixed(0)}`, x, y + fs * .75);
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* bottom panel: residual trajectories (boost) or running total (predict) */
+function panelGeom() {
+  const PH = panelH(), top = CH - PH, x0 = 84, x1 = CW - (S.stage === 'predict' ? 150 : 140), y0 = top + 36, y1 = CH - 24;
+  return { PH, top, x0, x1, y0, y1, X: k => x0 + k / NROUNDS * (x1 - x0) };
+}
+function drawPanel(C) {
+  if (S.panelK <= 0) return;
+  const P = panelGeom();
+  ctx.globalAlpha = S.panelK;
+  ctx.fillStyle = C.surf; ctx.fillRect(0, P.top, CW, CH - P.top);
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, P.top + .5); ctx.lineTo(CW, P.top + .5); ctx.stroke();
+  ctx.textBaseline = 'alphabetic';
+  // x-axis ticks
+  ctx.font = `500 10.5px 'JetBrains Mono', monospace`; ctx.fillStyle = C.muted; ctx.textAlign = 'center';
+  [0, 25, 50, 75, 100].forEach(k => ctx.fillText(k === 0 ? 'base' : k, P.X(k), P.y1 + 15));
+  if (S.stage === 'boost') drawResidualLines(P, C); else drawRunning(P, C);
+  ctx.globalAlpha = 1;
+}
+function drawResidualLines(P, C) {
+  const lim = R0MAX * 1.08, Yr = v => (P.y0 + P.y1) / 2 - v / lim * (P.y1 - P.y0) / 2, k = Math.min(S.shown, S.hist.length - 1);
+  ctx.font = `600 12px 'Space Grotesk', sans-serif`; ctx.fillStyle = C.ink; ctx.textAlign = 'left';
+  ctx.fillText(`Residual of each student vs. number of trees`, P.x0, P.top + 22);
+  ctx.textAlign = 'right'; ctx.font = `500 11px 'JetBrains Mono', monospace`; ctx.fillStyle = C.muted;
+  ctx.fillText(`after ${k} trees · RMSE ${rmse(Y.map((y, i) => y - S.hist[k][i])).toFixed(2)}`, P.x1, P.top + 22);
+  ctx.setLineDash([3, 3]); ctx.strokeStyle = C.lineS; ctx.beginPath(); ctx.moveTo(P.x0, Yr(0)); ctx.lineTo(P.x1, Yr(0)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.textAlign = 'right'; ctx.fillText(fmtS(R0MAX, 0), P.x0 - 8, Yr(R0MAX) + 4); ctx.fillText('0', P.x0 - 8, Yr(0) + 4); ctx.fillText(fmtS(-R0MAX, 0), P.x0 - 8, Yr(-R0MAX) + 4);
+  const order = ALL.filter(i => i !== OUT).concat(OUT);
+  for (const i of order) {
+    const out = i === OUT;
+    ctx.strokeStyle = out ? C.neg : C.lineS; ctx.lineWidth = out ? 3 : 1.3; ctx.globalAlpha = S.panelK * (out ? 1 : .85);
+    ctx.beginPath();
+    for (let j = 0; j <= k; j++) { const x = P.X(j), y = Yr(S.hist[j][i]); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = S.panelK;
+  const yo = Yr(S.hist[k][OUT]);
+  ctx.beginPath(); ctx.arc(P.X(k), yo, 4.5, 0, Math.PI * 2); ctx.fillStyle = C.neg; ctx.fill();
+  const z = Yr(0), below = yo >= z;
+  let ly = clamp(yo + 4, P.y0 + 8, P.y1), oy = below ? z - 8 : z + 16;
+  if (Math.abs(ly - oy) < 16) ly = below ? oy + 16 : oy - 16;
+  ctx.textAlign = 'left'; ctx.font = `700 12px 'JetBrains Mono', monospace`; ctx.fillStyle = C.neg;
+  ctx.fillText(`row 7 ${fmtS(S.hist[k][OUT])}`, P.x1 + 10, ly);
+  ctx.font = `500 11px 'JetBrains Mono', monospace`; ctx.fillStyle = C.muted;
+  ctx.fillText('others', P.x1 + 10, oy);
+}
+function drawRunning(P, C) {
+  if (!S.cum) return;
+  const lo = S.wfLo, hi = S.wfHi, Yv = v => P.y1 - (v - lo) / (hi - lo) * (P.y1 - P.y0);
+  ctx.font = `600 12px 'Space Grotesk', sans-serif`; ctx.fillStyle = C.ink; ctx.textAlign = 'left';
+  ctx.fillText(`Running prediction = base + Σ η·(leaf weight)`, P.x0, P.top + 22);
+  ctx.font = `500 10.5px 'JetBrains Mono', monospace`; ctx.fillStyle = C.muted; ctx.textAlign = 'right';
+  ctx.fillText(hi.toFixed(0), P.x0 - 8, P.y0 + 4); ctx.fillText(lo.toFixed(0), P.x0 - 8, P.y1 + 4);
+  ctx.setLineDash([3, 3]); ctx.strokeStyle = C.lineS; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(P.x0, Yv(BASE)); ctx.lineTo(P.x1, Yv(BASE)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.textAlign = 'right'; ctx.fillStyle = C.acc; ctx.fillText(`base ${BASE.toFixed(1)}`, P.x0 - 8, Yv(BASE) + 4);
+  // steps in tree order, using whatever has landed
+  let run = BASE, px = P.X(0), py = Yv(BASE);
+  ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.fillStyle = C.acc; ctx.fill();
+  for (let k = 0; k < NROUNDS; k++) {
+    if (!S.landed[k]) continue;
+    const c = S.contrib[k], nx = P.X(k + 1), ny = Yv(run + c);
+    ctx.strokeStyle = C.lineS; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(nx, py); ctx.stroke();
+    ctx.strokeStyle = c >= 0 ? C.pos : C.neg; ctx.lineWidth = Math.max(2, (P.x1 - P.x0) / NROUNDS * .6);
+    ctx.beginPath(); ctx.moveTo(nx, py); ctx.lineTo(nx, ny === py ? py - .5 : ny); ctx.stroke();
+    run += c; px = nx; py = ny;
+  }
+  ctx.textAlign = 'left'; ctx.font = `700 22px 'JetBrains Mono', monospace`; ctx.fillStyle = C.acc;
+  ctx.fillText(`ŷ ${S.total.toFixed(1)}`, P.x1 + 14, clamp(py + 8, P.y0 + 10, P.y1));
+}
+
+/* ---------------- sound (Web Audio, synthesized) ---------------- */
+const SND = { ctx: null, master: null, on: true, last: {} };
+try { SND.on = localStorage.getItem('rf-sound') !== 'off'; } catch (e) {}
+function audio() {
+  if (!SND.ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+    const c = new AC(), comp = c.createDynamicsCompressor(), m = c.createGain();
+    comp.threshold.value = -20; comp.ratio.value = 8; m.gain.value = .6;
+    m.connect(comp); comp.connect(c.destination);
+    SND.ctx = c; SND.master = m;
+  }
+  if (SND.ctx.state === 'suspended') SND.ctx.resume();
+  return SND.ctx;
+}
+function blip({ f, f2 = f, dur = .12, vol = .3, type = 'triangle', at = 0 }) {
+  const c = SND.ctx; if (!SND.on || !c || c.state !== 'running') return;
+  const t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .004); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g); g.connect(SND.master); o.start(t); o.stop(t + dur + .02);
+}
+function gate(key, ms) { const now = performance.now(); if (now - (SND.last[key] || 0) < ms) return false; SND.last[key] = now; return true; }
+const PENTA = [0, 2, 4, 7, 9];
+const note = (base, step) => base * Math.pow(2, (Math.floor(step / 5) * 12 + PENTA[((step % 5) + 5) % 5]) / 12);
+const lvlOf = b => b.ti === 0 ? 1 : b.ti < 12 ? .6 : .28;
+const gapOf = lvl => lvl === 1 ? 0 : lvl > .5 ? 12 : 24;
+function sPeg(depth, lvl) {
+  if (!gate('peg', gapOf(lvl))) return;
+  const f = note(587, depth * 2 + Math.floor(Math.random() * 3));
+  blip({ f, f2: f * .94, dur: lvl === 1 ? .22 : .1, vol: .38 * lvl, type: 'triangle' });
+  blip({ f: f * 3.01, f2: f * 2.9, dur: .05, vol: .1 * lvl, type: 'sine' });
+}
+function sLeaf(val, lvl) {
+  if (!gate('leaf', gapOf(lvl))) return;
+  const f = val >= 0 ? 262 : 196;
+  blip({ f, f2: f * .6, dur: lvl === 1 ? .3 : .13, vol: .45 * lvl, type: 'sine' });
+}
+function sWhoosh() { blip({ f: 260, f2: 900, dur: .4, vol: .06, type: 'sine' }); }
+function sLand(total, lvl) {   // pitch follows the running prediction
+  if (!gate('land', gapOf(lvl))) return;
+  const step = Math.round(clamp((total - S.wfLo) / (S.wfHi - S.wfLo), 0, 1) * 12), f = note(330, step);
+  blip({ f, f2: f * .98, dur: lvl === 1 ? .35 : .16, vol: .32 * Math.max(lvl, .45), type: 'sine' });
+  blip({ f: f * 2.76, f2: f * 2.7, dur: .08, vol: .12 * Math.max(lvl, .45), type: 'sine' });
+}
+function sVerdict() {
+  [523, 659, 784, 1047].forEach((f, i) => { blip({ f, dur: .9, vol: .22, type: 'triangle', at: i * .09 }); blip({ f: f * 2, dur: .5, vol: .05, type: 'sine', at: i * .09 }); });
+}
+function renderSoundBtn() { const b = $('#soundBtn'); b.textContent = SND.on ? 'Sound: on' : 'Sound: off'; b.setAttribute('aria-pressed', SND.on); }
+$('#soundBtn').addEventListener('click', () => {
+  SND.on = !SND.on; try { localStorage.setItem('rf-sound', SND.on ? 'on' : 'off'); } catch (e) {}
+  renderSoundBtn(); if (SND.on) { audio(); setTimeout(() => sPeg(1, 1), 30); }
+});
+renderSoundBtn();
+
+/* balls */
+function launch(ti, t0, seg, fly) {
+  const tr = S.trees[ti];
+  S.balls.push({ ti, path: tr.path, val: S.contrib[ti], t0, seg, fly, hold: Math.max(60, seg * .6), leafAt: false, landed: false });
+}
+function ballState(b, now) {
+  const t = now - b.t0; if (t < 0) return null;
+  const tr = S.trees[b.ti], segs = b.path.length, tDrop = segs * b.seg;
+  if (t < tDrop) {
+    const j = Math.floor(t / b.seg); tr.prog = j;
+    if (j >= 1 && j !== b.lastJ) sPeg(b.path[j - 1].depth, lvlOf(b));
+    b.lastJ = j;
+    return { ph: 'drop', j, u: (t - j * b.seg) / b.seg };
+  }
+  tr.prog = segs;
+  if (!b.leafAt) { b.leafAt = true; tr.used = true; sLeaf(b.val, lvlOf(b)); }
+  const tf = t - tDrop - b.hold;
+  if (tf < 0) return { ph: 'hold' };
+  if (!b.flew) { b.flew = true; if (b.ti === 0) sWhoosh(); }
+  if (tf < b.fly) return { ph: 'fly', u: tf / b.fly };
+  if (!b.landed) { b.landed = true; S.landed[b.ti] = true; S.total += b.val; sLand(S.total, lvlOf(b)); }
+  return { ph: 'land' };
+}
+function ballXY(b, st, V) {
+  const tr = S.trees[b.ti], c = cellScreen(b.ti, V), G = geo(tr, c);
+  const big = c.sw > 360, rb = big ? 11 : clamp(c.sw * .045, 2.2, 9);
+  const pts = b.path.map(n => ({ x: G.X(n), y: G.Y(n) }));
+  if (st.ph === 'drop') {
+    const A = st.j === 0 ? { x: pts[0].x, y: pts[0].y - Math.max(14, c.sh * .18) } : pts[st.j - 1], B = pts[st.j];
+    return { x: lerp(A.x, B.x, 1 - Math.pow(1 - st.u, 3)), y: lerp(A.y, B.y, st.u * st.u), r: rb, neutral: true };
+  }
+  const L = pts[pts.length - 1];
+  if (st.ph === 'hold') return { x: L.x, y: L.y, r: rb };
+  // fly to this tree's step on the running-total chart
+  const P = panelGeom(), lo = S.wfLo, hi = S.wfHi, Yv = v => P.y1 - (v - lo) / (hi - lo) * (P.y1 - P.y0);
+  const T = { x: P.X(b.ti + 1), y: Yv(S.total + b.val) }, u = ease(st.u);
+  return { x: lerp(L.x, T.x, u), y: lerp(L.y, T.y, u) - Math.sin(Math.PI * st.u) * clamp(CH * .12, 40, 110), r: lerp(rb, 3, u) };
+}
+function drawBall(p, val, C) {
+  ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  ctx.fillStyle = p.neutral ? C.acc : (val >= 0 ? C.pos : C.neg); ctx.fill();
+  if (p.r > 3.5) { ctx.lineWidth = Math.min(2.5, p.r * .25); ctx.strokeStyle = C.surf; ctx.stroke(); }
+  if (!p.neutral && p.r > 6) {
+    ctx.font = `700 13px 'JetBrains Mono', monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4; ctx.strokeStyle = C.surf; ctx.strokeText(fmtS(val, 2), p.x + p.r + 6, p.y);
+    ctx.fillStyle = val >= 0 ? C.pos : C.neg; ctx.fillText(fmtS(val, 2), p.x + p.r + 6, p.y);
+  }
+}
+
+function loop() { if (!S.canvasOn) return; draw(); requestAnimationFrame(loop); }
+function draw() {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  if (r.width !== CW || r.height !== CH || dpr !== DPR) { CW = r.width; CH = r.height; DPR = dpr; cv.width = Math.round(CW * DPR); cv.height = Math.round(CH * DPR); }
+  if (!CW || !CH) return;
+  const now = performance.now(), C = colors(), V = viewXf();
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, CW, CH);
+  const states = S.balls.map(b => ballState(b, now));
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, CW, CH - panelH()); ctx.clip();
+  for (let i = 0; i < S.trees.length; i++) {
+    const tr = S.trees[i]; if (!tr.appear) continue;
+    const c = cellScreen(i, V);
+    if (c.sx > CW || c.sy > CH || c.sx + c.sw < 0 || c.sy + c.sh < 0) continue;
+    drawCell(tr, i, c, C);
+  }
+  S.balls.forEach((b, i) => { const st = states[i]; if (st && (st.ph === 'drop' || st.ph === 'hold')) drawBall(ballXY(b, st, V), b.val, C); });
+  ctx.restore();
+  drawPanel(C);
+  S.balls.forEach((b, i) => { const st = states[i]; if (st && st.ph === 'fly') drawBall(ballXY(b, st, V), b.val, C); });
+
+  if (S.logTree && S.trees[0].path) {
+    const tr = S.trees[0], p = tr.path, key = tr.prog + '|' + p.length;
+    if (key !== S.logKey) {
+      S.logKey = key;
+      let h = '';
+      for (let q = 0; q < p.length - 1 && q < tr.prog - 1; q++) {
+        const n = p[q], v = S.newRow[n.f], yes = v <= n.thr;
+        h += `<span>${FEATS[n.f].name} = ${v} ${yes ? '≤' : '>'} ${fmtT(n.thr)} → ${yes ? 'yes' : 'no'}</span>`;
+      }
+      if (tr.prog >= p.length) { const lf = p[p.length - 1]; h += `<span class="${lf.w >= 0 ? 'lp' : 'ln'}">leaf → adds ${fmtS(ETA * lf.w, 2)}</span>`; }
+      $('#log').innerHTML = h;
+    }
+  }
+  if (S.stage === 'predict' && S.balls.length) setCount(`${S.total.toFixed(1)}<small>ŷ so far</small>`);
+}
+function setCount(h) { const el = $('#count'); if (el.innerHTML !== h) el.innerHTML = h; }
+function caption(t) { $('#cap').textContent = t; }
+
+/* ---------------- boost the remaining rounds ---------------- */
+async function runBoost() {
+  S.busy = true; S.selected = null; S.hover = null;
+  S.trees.forEach(t => { layoutTree(t); t.reveal = t.order.length; t.appear = 1; t.path = null; t.prog = 0; });
+  let F = S.F.slice();
+  for (let k = NHAND; k < NROUNDS; k++) {
+    const r = Y.map((y, i) => y - F[i]), tr = layoutTree(growAuto(r));
+    tr.reveal = 0; tr.appear = 0; tr.path = null; tr.prog = 0;
+    S.trees.push(tr);
+    F = F.map((f, i) => f + ETA * leafOf(tr, X[i]).w);
+    S.hist.push(Y.map((y, i) => y - F[i]));
+  }
+  const hist = S.hist;
+  const showRound = k => { S.shown = k; S.Fd = Y.map((y, i) => y - hist[k][i]); renderTable(); };
+  S.cam = { ...CAM.row3 }; S.panelK = 0; S.shown = NHAND;
+  setStage('boost');
+  caption('Your three trees'); setCount(`${NHAND}<small>trees</small>`);
+  await tween(700, e => { S.panelK = e; });
+  await sleep(500);
+  await camTo(CAM.block, 1000);
+  for (let k = NHAND; k < 12; k++) {
+    const tr = S.trees[k]; tr.appear = 1;
+    caption(`Tree ${k + 1} · fit to the residuals left by trees 1–${k}`);
+    await tween(k === NHAND ? 650 : 360, (e, u) => { tr.reveal = u * tr.order.length; });
+    showRound(k + 1); setCount(`${k + 1}<small>trees</small>`);
+  }
+  await sleep(400);
+  caption(`…one after another, up to ${NROUNDS}`);
+  await camTo(CAM.all, 1500);
+  const rest = S.trees.slice(12), n = rest.length;
+  await tween(4200, (e, t) => {
+    let done = 12;
+    rest.forEach((tr, j) => { const l = clamp(t * (n + 3) - j, 0, 1); tr.appear = l > 0 ? 1 : 0; tr.reveal = l * tr.order.length; if (l >= 1) done++; });
+    if (done !== S.shown) { showRound(done); setCount(`${done}<small>trees</small>`); }
+  });
+  showRound(NROUNDS); setCount(`${NROUNDS}<small>trees</small>`);
+  S.F = Y.map((y, i) => y - hist[NROUNDS][i]);
+  caption(`${NROUNDS} trees · row 7's residual: ${fmtS(hist[0][OUT])} → ${fmtS(hist[NROUNDS][OUT])}`);
+  S.rf = rfFitted();
+  S.busy = false; S.boostDone = true; renderCtrl();
+}
+
+/* ---------------- predict ---------------- */
+function randomInputs() { S.inputs = FEATS.map(f => rint(f.min, f.max)); }
+function toPredict() {
+  if (!S.inputs) randomInputs();
+  setStage('predict');
+  setCount(''); caption('Ready: enter a new student, then drop it');
+}
+async function runPredict() {
+  if (S.busy) return;
+  S.busy = true;
+  const x = S.inputs.map((v, i) => { const n = parseFloat(v); return isNaN(n) ? FEATS[i].min : n; });
+  S.inputs = x.slice(); S.newRow = x; S.newPred = null; S.verdict = null;
+  renderCtrl(); renderTable();
+  $('#verdict').classList.remove('show'); $('#log').innerHTML = ''; S.logKey = '';
+  S.trees.forEach(t => { t.path = predictPath(t, x); t.prog = 0; t.used = false; });
+  S.contrib = S.trees.map(t => ETA * t.path[t.path.length - 1].w);
+  S.cum = [BASE]; S.contrib.forEach(c => S.cum.push(S.cum[S.cum.length - 1] + c));
+  const lo = Math.min(...S.cum), hi = Math.max(...S.cum), pad = Math.max(2, (hi - lo) * .15);
+  S.wfLo = lo - pad; S.wfHi = hi + pad;
+  S.balls = []; S.landed = Array(NROUNDS).fill(false); S.total = BASE;
+  const now = () => performance.now();
+  caption('Tree 1 · your tree');
+  S.logTree = true;
+  await camTo(CAM.tree1, 1100);
+  launch(0, now() + 150, 700, 950);
+  await waitBalls();
+  await sleep(600);
+  S.logTree = false; $('#log').innerHTML = '';
+  caption('Trees 2 – 3 · also yours');
+  await camTo(CAM.row3, 900);
+  launch(1, now() + 100, 300, 750); launch(2, now() + 700, 300, 750);
+  await waitBalls();
+  caption('Trees 4 – 12');
+  await camTo(CAM.block, 800);
+  for (let i = 3; i < 12; i++) launch(i, now() + (i - 3) * 160, 140, 650);
+  await waitBalls();
+  caption(`Trees 13 – ${NROUNDS}`);
+  await camTo(CAM.all, 1300);
+  const base = now();
+  for (let i = 12; i < NROUNDS; i++) launch(i, base + (i - 12) * 40, 60, 650);
+  await waitBalls();
+
+  const total = S.cum[NROUNDS];
+  S.newPred = total;
+  S.verdict = { total, c: S.contrib, c23: S.contrib[1] + S.contrib[2], rest: sum(S.contrib.slice(3)) };
+  sVerdict();
+  caption('All 100 trees have added their part');
+  $('#verdict').innerHTML = `<div class="vk">XGBoost prediction · exam score</div>
+    <div class="vb">${total.toFixed(1)}</div>
+    <div class="vs2">${BASE.toFixed(1)} base ${fmtS(total - BASE)} from 100 trees</div>
+    <div class="vx">click to dismiss</div>`;
+  $('#verdict').classList.add('show');
+  S.busy = false; renderCtrl(); renderTable();
+}
+function waitBalls() {
+  return new Promise(res => { const chk = () => { if (S.balls.every(b => b.landed)) res(); else requestAnimationFrame(chk); }; chk(); });
+}
+$('#verdict').addEventListener('click', () => $('#verdict').classList.remove('show'));
+
+/* ---------------- events ---------------- */
+$('#ctrl').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const act = b.dataset.act, n = S.selected;
+  if (act === 'start') startBase();
+  else if (act === 'plant') plantTree(1);
+  else if (act === 'split' && n && !S.busy) { applySplit(n, n.splits[+b.dataset.f]); afterSplit(); }
+  else if (act === 'stop' && n && !S.busy) { n.stopped = true; afterSplit(); }
+  else if (act === 'auto' && !S.busy) autoFinish();
+  else if (act === 'add') addTree();
+  else if (act === 'next' && !S.busy) plantTree(S.round + 1);
+  else if (act === 'boost' && !S.busy) runBoost();
+  else if (act === 'topredict' && !S.busy) toPredict();
+  else if (act === 'rand' && !S.busy) { randomInputs(); renderCtrl(); }
+  else if (act === 'drop') { audio(); runPredict(); }
+});
+$('#ctrl').addEventListener('input', e => {
+  const i = e.target.dataset && e.target.dataset.i; if (i == null) return;
+  S.inputs[+i] = e.target.value;
+});
+$('#resetBtn').addEventListener('click', () => location.reload());
+new ResizeObserver(() => { if (S.stage === 'tree') { relayout(false); renderRes(); } }).observe($('#stageB'));
+
+setStage('data');
+})();
+</script>
+</body>
+</html>
