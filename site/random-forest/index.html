@@ -402,6 +402,13 @@ function applySplit(n, s) {
 function walk(n, fn) { fn(n); if (n.left) { walk(n.left, fn); walk(n.right, fn); } }
 function allNodes(r) { const a = []; walk(r, n => a.push(n)); return a; }
 const better = (a, b) => b.red > a.red ? b : a;
+// randomForest tries the sampled features in random order and keeps the first strictly better split, so a tie
+// (common on 10 rows) goes to a random feature. Always keeping the lowest index instead inflated Study's importance.
+function pickBest(cands) {
+  const c = cands.slice();
+  for (let i = c.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [c[i], c[j]] = [c[j], c[i]]; }
+  return c.reduce(better);
+}
 
 function growAuto(idx) {
   const root = makeNode(idx, 0, null), q = [root];
@@ -412,7 +419,7 @@ function growAuto(idx) {
     let cands = fs.map(f => bestSplit(n.idx, f)).filter(Boolean);
     if (!cands.length) cands = [0, 1, 2, 3, 4].filter(f => !fs.includes(f)).map(f => bestSplit(n.idx, f)).filter(Boolean);
     if (!cands.length) { n.stopped = true; continue; }
-    applySplit(n, cands.reduce(better));
+    applySplit(n, pickBest(cands));
     q.push(n.left, n.right);
   }
   return root;
@@ -530,10 +537,9 @@ function renderCtrl() {
       <h3>Same recipe, 499 more times</h3>
       <p>Every new tree gets a <b>fresh bootstrap sample</b> and <b>fresh random feature pairs</b> at each split, so the trees end up different from each other.</p>`;
     if (S.forestDone) {
-      const fs = forestStats(), mx = Math.max(...fs.rf);
+      const fs = forestStats();
       h += `<div class="stats"><div class="stat"><b>${NTREES}</b><span>trees</span></div><div class="stat"><b>${fs.dep.toFixed(1)}</b><span>avg depth</span></div><div class="stat"><b>${fs.lv.toFixed(1)}</b><span>avg leaves</span></div></div>
-        <div class="lbl">Feature chosen for the first (root) split</div>
-        <div class="fbars">${fs.rf.map((v, i) => `<div class="fbar"><span>${i < 5 ? FEATS[i].name : 'no split'}</span><div><i style="width:${v / mx * 100}%"></i></div><b>${v}</b></div>`).join('')}</div>
+        ${importanceHtml(fs)}
         <p>Without the randomness, every tree would make the same choice at the root. The variety is what makes the vote useful.</p>
         <button class="btn primary" data-act="topredict">Predict a new student →</button>`;
     } else h += `<p class="muted">Growing…</p>`;
@@ -542,6 +548,7 @@ function renderCtrl() {
     h = `<div class="kicker">Step 4 · Predict</div>
       <h3>Drop a new student through the forest</h3>
       <p>Type values or randomize. The row falls through every tree like a plinko ball; whichever leaf it lands in is that tree's vote. The forest answers with the <b>mode</b>: the most common vote.</p>
+      ${importanceHtml(forestStats())}
       <div class="inputs">${FEATS.map((f, i) => `<label>${f.name} <small>${f.unit}</small><input type="number" data-i="${i}" value="${S.inputs[i]}" ${dis}></label>`).join('')}</div>
       <div class="row"><button class="btn" data-act="rand" ${dis}>Randomize</button><button class="btn primary" data-act="drop" ${dis}>Drop it ↓</button></div>`;
     if (S.verdict) {
@@ -557,6 +564,16 @@ function renderCtrl() {
   $('#ctrl').innerHTML = h;
 }
 
+// Shown on the forest step and kept on the predict step, so learners can see which inputs the forest leans on.
+function importanceHtml(fs) {
+  const mi = Math.max(...fs.imp) || 1, mr = Math.max(...fs.rf) || 1;
+  const order = [0, 1, 2, 3, 4].sort((a, b) => fs.imp[b] - fs.imp[a]);
+  return `<div class="lbl">Variable importance · mean decrease in Gini</div>
+    <div class="fbars">${order.map(i => `<div class="fbar"><span>${FEATS[i].name}</span><div><i style="width:${fs.imp[i] / mi * 100}%"></i></div><b>${fs.imp[i].toFixed(2)}</b></div>`).join('')}</div>
+    <p class="small muted">What randomForest's <code>importance()</code> reports: each split adds n × ΔGini for its feature (n counts bootstrap duplicates), summed per tree and averaged over the ${NTREES} trees. A bigger bar means more of the forest's splits rely on that feature, so changing it is more likely to swing the vote, although for any single student it might not.</p>
+    <div class="lbl">Feature chosen for the first (root) split</div>
+    <div class="fbars">${fs.rf.map((v, i) => `<div class="fbar"><span>${i < 5 ? FEATS[i].name : 'no split'}</span><div><i style="width:${v / mr * 100}%"></i></div><b>${v}</b></div>`).join('')}</div>`;
+}
 function ctrlGrow() {
   const nodes = allNodes(S.root), open = nodes.filter(isOpen).length, n = S.selected;
   let h = `<div class="kicker">Step 2 · Build Tree 1 by hand</div>`;
@@ -731,7 +748,7 @@ async function autoFinish() {
     while (!valid.length) { n.feats = pickFeats(); n.splits = n.feats.map(f => bestSplit(n.idx, f)); valid = n.splits.filter(Boolean); }
     renderSvg(); renderTable();
     await sleep(380);
-    applySplit(n, valid.reduce(better)); Sound.split();
+    applySplit(n, pickBest(valid)); Sound.split();
     S.selected = null; relayout(true); renderTable();
     await sleep(520);
   }
@@ -995,9 +1012,12 @@ function setCount(h) { const el = $('#count'); if (el.innerHTML !== h) el.innerH
 function caption(t) { $('#cap').textContent = t; }
 
 function forestStats() {
-  const rf = [0, 0, 0, 0, 0, 0]; let dep = 0, lv = 0;
-  S.trees.forEach(t => { rf[t.left ? t.f : 5]++; dep += t.maxD; lv += t.nLeaves; });
-  return { rf, dep: dep / S.trees.length, lv: lv / S.trees.length };
+  const rf = [0, 0, 0, 0, 0, 0], imp = [0, 0, 0, 0, 0]; let dep = 0, lv = 0;
+  S.trees.forEach(t => {
+    rf[t.left ? t.f : 5]++; dep += t.maxD; lv += t.nLeaves;
+    walk(t, n => { if (n.left) imp[n.f] += n.idx.length * n.red; });   // R: MeanDecreaseGini
+  });
+  return { rf, imp: imp.map(v => v / S.trees.length), dep: dep / S.trees.length, lv: lv / S.trees.length };
 }
 
 async function runForest() {
