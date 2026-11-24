@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hierarchical Clustering by Hand</title>
+<title>Hierarchical Clustering</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -153,7 +153,7 @@ a.btn{text-decoration:none;display:inline-block}
 <header class="top">
   <div class="brand">
     <a class="back" href="../">← ML Explainers</a>
-    <h1>Hierarchical clustering <span>by hand</span></h1>
+    <h1>Hierarchical clustering</h1>
     <p>Merge 10 cities yourself, watch R merge all 60, then cut the tree into clusters.</p>
   </div>
   <ol class="steps" id="steps">
@@ -867,7 +867,7 @@ function renderCtrl() {
         <div class="toggle"><button class="${S.prop === 'true' ? 'on' : ''}" data-act="prop" data-v="true">True proportions</button><button class="${S.prop === 'stretch' ? 'on' : ''}" data-act="prop" data-v="stretch">Stretched like plot()</button></div>
         <p class="note">${S.prop === 'true' ? 'With both axes on the same scale, as dist() sees them, the cities lie on a thin line: MORT barely moves the distance.' : 'R’s plot() stretches each axis to fit, which hides the problem. The colours still split only left to right.'}</p>
         <p>Scaling gives every column an equal 1/16 share. That is why the script scales before clustering.</p>
-        <div class="row"><a class="btn primary" href="../pca/">Next: PCA by hand →</a></div>`;
+        <div class="row"><a class="btn primary" href="../pca/">Next: PCA →</a></div>`;
     }
   }
   $('#ctrl').innerHTML = h;
