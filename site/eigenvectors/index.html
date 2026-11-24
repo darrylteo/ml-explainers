@@ -51,6 +51,9 @@ a.btn{text-decoration:none;display:inline-block}
 .note{font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 10px}
 .callout{border:1px solid rgba(255,196,107,.35);background:rgba(255,196,107,.07);border-radius:12px;padding:10px 12px;margin:0 0 12px;font-size:14px;line-height:1.5;color:#ffe2b0}
 .callout b{color:#fff}
+.toggle{display:inline-flex;flex-wrap:wrap;background:rgba(255,255,255,.04);border:1px solid var(--line-strong);border-radius:11px;padding:3px;gap:3px;margin:0 0 12px}
+.toggle button{font:600 13px var(--sans);border:0;background:none;color:var(--muted);padding:7px 12px;border-radius:8px;cursor:pointer}
+.toggle button.on{background:var(--accent-soft);color:var(--accent);box-shadow:0 0 14px rgba(110,231,255,.18)}
 .lbl{font:700 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:4px 0 8px}
 .matrix{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .mx{display:grid;grid-template-columns:auto auto;gap:6px 18px;padding:8px 16px;border-left:2px solid var(--line-strong);border-right:2px solid var(--line-strong);border-radius:8px;font:700 17px var(--mono)}
@@ -164,7 +167,12 @@ const quad = v => { const a = Av(v); return v[0] * a[0] + v[1] * a[1]; };
 const C1 = '#4dffb4', C2 = '#a78bfa', CV = '#6ee7ff', CA = '#ff6fa8';
 
 const ORDER = ['data', 'stretch', 'find', 'spread', 'repeat'];
-const S = { stage: 'data', reached: 0, busy: false, morph: 0, morphTo: 0, phi: 70 / DEG, found: [false, false], spreadPhi: 120 / DEG, pv: 160 / DEG, hist: [], push: null };
+const S = { stage: 'data', reached: 0, busy: false, sub: 'meet', entry: 'a11', meetT0: 0, morph: 0, morphTo: 0, phi: 70 / DEG, found: [false, false], flash: null, spreadPhi: 120 / DEG, pv: 160 / DEG, hist: [], push: null };
+const ENTRY = {
+  a11: { i: 0, j: 0, name: 'EDUC spread', col: '#6ee7ff', what: 'how far each city sits from the average, left or right, squared' },
+  a22: { i: 1, j: 1, name: 'WWDRK spread', col: '#a78bfa', what: 'how far each city sits from the average, up or down, squared' },
+  a12: { i: 0, j: 1, name: 'move together', col: '#ff6fa8', what: 'left–right distance × up–down distance: positive when a city is above average on both or below on both' },
+};
 
 Code.mount('#code', {
   R: [
@@ -253,18 +261,59 @@ function frame(t) {
   else if (S.stage === 'spread') drawSpread(g, t);
   else if (S.stage === 'repeat') drawRepeat(g, t);
 }
+// where A comes from: each entry is an average of areas, one per city
+function drawMeet(g, t) {
+  const E = ENTRY[S.entry], R = Math.max(...HC.map(([x, y]) => Math.hypot(x, y))), s = Math.min(W, H) * .36 / R;
+  const X = x => g.cx + x * s, Y = y => g.cy - y * s;
+  ctx.strokeStyle = 'rgba(140,160,255,.25)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, g.cy); ctx.lineTo(W, g.cy); ctx.moveTo(g.cx, 0); ctx.lineTo(g.cx, H); ctx.stroke();
+  ctx.font = '600 12.5px Space Grotesk, sans-serif'; ctx.fillStyle = '#aab3dc'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+  ctx.fillText('EDUC (above average →)', W - 12, g.cy - 6); ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('↑ WWDRK above average', g.cx + 8, 44);
+  const grow = ease(clamp((t - S.meetT0) / 900, 0, 1));
+  HC.forEach(([x, y]) => {
+    let x0, y0, x1, y1, colr = E.col;
+    if (S.entry === 'a11') { x0 = 0; x1 = x; y0 = y; y1 = y - Math.sign(y || 1) * Math.abs(x); }
+    else if (S.entry === 'a22') { y0 = 0; y1 = y; x0 = x; x1 = x - Math.sign(x || 1) * Math.abs(y); }
+    else { x0 = 0; y0 = 0; x1 = x; y1 = y; colr = x * y >= 0 ? '#ff6fa8' : '#5b8cff'; }
+    const rx = Math.min(X(x0), X(lerp(x0, x1, grow))), ry = Math.min(Y(y0), Y(lerp(y0, y1, grow)));
+    const rw = Math.abs(X(lerp(x0, x1, grow)) - X(x0)), rh = Math.abs(Y(lerp(y0, y1, grow)) - Y(y0));
+    ctx.fillStyle = colr; ctx.globalAlpha = .16; ctx.fillRect(rx, ry, rw, rh); ctx.globalAlpha = .7; ctx.strokeStyle = colr; ctx.lineWidth = 1.2; ctx.strokeRect(rx, ry, rw, rh); ctx.globalAlpha = 1;
+  });
+  HC.forEach(([x, y]) => {
+    const gr = ctx.createRadialGradient(X(x) - 2, Y(y) - 2, 1, X(x), Y(y), 8);
+    gr.addColorStop(0, '#fff'); gr.addColorStop(.4, '#bcd0ff'); gr.addColorStop(1, '#2a3577');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(X(x), Y(y), 8, 0, TAU); ctx.fill();
+  });
+  label(`${E.name}: add up the 10 areas, divide by 9 → ${A[E.i][E.j].toFixed(2)}`, 14, 22, '#ffe2b0');
+  if (S.entry === 'a12') label('pink areas add, blue areas subtract', 14, 50, '#c9d0f5');
+}
 function drawStretch(g, t) {
+  if (S.sub === 'meet') return drawMeet(g, t);
   S.morph = lerp(S.morph, S.morphTo, .06);
   grid(g, S.morph); circleAndEllipse(g, false);
   for (let k = 0; k < 24; k++) {
     const a = k / 24 * TAU, v = [Math.cos(a), Math.sin(a)], w = Av(v), p = [lerp(v[0], w[0], S.morph), lerp(v[1], w[1], S.morph)];
-    arrow(g.cx, g.cy, g.X(p[0]), g.Y(p[1]), `hsl(${k * 15},90%,68%)`, 1.8, .9);
+    arrow(g.cx, g.cy, g.X(p[0]), g.Y(p[1]), k === 0 ? '#ffffff' : `hsl(${k * 15},90%,68%)`, k === 0 ? 3.2 : 1.8, k === 0 ? 1 : .75);
   }
+  const w0 = Av([1, 0]), p0 = [lerp(1, w0[0], S.morph), lerp(0, w0[1], S.morph)];
+  label(S.morphTo ? `(1, 0) → (${A[0][0].toFixed(2)}, ${A[1][0].toFixed(2)})` : '(1, 0)', g.X(p0[0]) + 10, g.Y(p0[1]) - 16, '#fff');
   label(S.morphTo ? 'after A: the circle became an ellipse' : 'before A: 24 arrows of length 1', 14, 22, '#c9d0f5');
 }
 function drawFind(g, t) {
   grid(g, 0); circleAndEllipse(g, true);
-  S.found.forEach((f, k) => { if (f) { line(g, EANG[k], k ? C2 : C1, .8); } });
+  const fl = S.flash && t - S.flash.t0 < 1600 ? S.flash : null;
+  S.found.forEach((f, k) => { if (f && !(fl && fl.k === k)) line(g, EANG[k], k ? C2 : C1, .8); });
+  if (fl) {   // the find: the line shoots out from the centre with a burst of light, as in the PCA explainer
+    const u = (t - fl.t0) / 1600, colr = fl.k ? C2 : C1, c = Math.cos(EANG[fl.k]), s = Math.sin(EANG[fl.k]), Lg = Math.max(W, H) * ease(Math.min(1, u * 2.2));
+    FX.glow(ctx, g.cx, g.cy, 80 + u * 520, colr, .55 * (1 - u));
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = '#fff'; ctx.lineCap = 'round';
+    [[14, .12], [6, .3], [2.4, 1]].forEach(([lw, al]) => { ctx.globalAlpha = al * (1 - u * .5); ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(g.cx - c * Lg, g.cy + s * Lg); ctx.lineTo(g.cx + c * Lg, g.cy - s * Lg); ctx.stroke(); });
+    ctx.restore();
+    line(g, EANG[fl.k], colr, .8);
+    const tip = [g.X(Math.cos(S.phi)), g.Y(Math.sin(S.phi))];
+    ctx.strokeStyle = colr; ctx.globalAlpha = 1 - u; ctx.lineWidth = 3 * (1 - u) + .5; ctx.beginPath(); ctx.arc(tip[0], tip[1], 10 + u * 70, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
+    label(`eigenvector ${fl.k + 1}! λ = ${LAM[fl.k].toFixed(2)}`, tip[0] + 16, tip[1] + 22, colr);
+  }
   const v = [Math.cos(S.phi), Math.sin(S.phi)], w = Av(v), turn = turnOf(v) * DEG;
   // the arc showing how far A turned the arrow
   const a0 = -Math.atan2(v[1], v[0]), a1 = -Math.atan2(w[1], w[0]);
@@ -324,7 +373,7 @@ function setPhi(a) {
   const v = [Math.cos(a), Math.sin(a)];
   if (Math.abs(turnOf(v)) * DEG < 1) {
     const k = [0, 1].reduce((b, j) => Math.abs(Math.cos(a - EANG[j])) > Math.abs(Math.cos(a - EANG[b])) ? j : b, 0);
-    if (!S.found[k]) { S.found[k] = true; S.phi = Math.cos(a - EANG[k]) > 0 ? EANG[k] : EANG[k] + Math.PI; Sound.verdict(true); dragging = false; cv.classList.remove('drag'); renderAll(); return; }
+    if (!S.found[k]) { S.found[k] = true; S.phi = Math.cos(a - EANG[k]) > 0 ? EANG[k] : EANG[k] + Math.PI; S.flash = { t0: performance.now(), k }; Sound.verdict(true); dragging = false; cv.classList.remove('drag'); renderAll(); return; }
   }
   renderSoon();
 }
@@ -341,7 +390,7 @@ let rT = 0; function renderSoon() { if (!rT) rT = setTimeout(() => { rT = 0; ren
 /* ---------------- panels ---------------- */
 const TITLES = {
   data:    ['What is an eigenvector?', 'Three ideas. Start in the panel on the left.'],
-  stretch: ['A matrix moves every arrow', 'Each coloured arrow is multiplied by the spread matrix A.'],
+  stretch: ['Meet the spread matrix A', 'First where its numbers come from, then what it does to arrows.'],
   find:    ['Hunt for arrows that don’t turn', 'Drag anywhere to point v. The pink arrow is A·v.'],
   spread:  ['The stretch is the spread', 'Drag to point a line. The gold curve shows the shadows’ spread in every direction.'],
   repeat:  ['Push, push, push', 'Multiply by A again and again, and any arrow swings to PC1.'],
@@ -360,9 +409,10 @@ document.querySelectorAll('#steps li').forEach((li, i) => li.addEventListener('c
 function renderAll() { renderCtrl(); renderMat(); }
 function renderMat() {
   const f = v => v.toFixed(2);
+  const lit = k => S.stage === 'stretch' && S.sub === 'meet' && S.entry === k ? ` style="color:${ENTRY[k].col};text-shadow:0 0 12px ${ENTRY[k].col}"` : '';
   let h = `<div class="lbl">The spread matrix A of the 10 cities</div><div class="matrix"><span style="font:700 22px var(--mono)">A =</span><div class="mx">
-    <span>${f(A[0][0])}<small>EDUC spread</small></span><span>${f(A[0][1])}<small>move together</small></span>
-    <span>${f(A[1][0])}<small>move together</small></span><span>${f(A[1][1])}<small>WWDRK spread</small></span></div></div>`;
+    <span${lit('a11')}>${f(A[0][0])}<small>EDUC spread</small></span><span${lit('a12')}>${f(A[0][1])}<small>move together</small></span>
+    <span${lit('a12')}>${f(A[1][0])}<small>move together</small></span><span${lit('a22')}>${f(A[1][1])}<small>WWDRK spread</small></span></div></div>`;
   const show = S.stage === 'spread' || S.stage === 'repeat' || S.found.some(Boolean);
   if (show) h += `<div class="eig">${[0, 1].map(k => (S.found[k] || S.stage === 'spread' || S.stage === 'repeat')
     ? `<div class="on" style="color:${k ? C2 : C1}"><span>eigenvector ${k + 1}: (${f(EV[k][0])}, ${f(EV[k][1])})</span><span>λ${k + 1} = ${f(LAM[k])}</span></div>`
@@ -376,9 +426,20 @@ function renderCtrl() {
       <p>In the PCA explainer you turned a screen until the shadows spread the widest. A computer does not turn screens: it solves one equation, and the answer is an <b>eigenvector</b>.</p>
       <p>We use the same 10 cities and the same 2 columns. First, meet their <b>spread matrix</b>.</p>
       <div class="row"><button class="btn primary" data-act="go" data-v="stretch">See what a matrix does →</button></div>`;
-  else if (st === 'stretch') h = kick('Step 2 · Stretch') + `<h3>Every arrow gets turned and stretched</h3>
-      <p>Press the button to multiply all 24 arrows by A. The circle becomes an ellipse, and the grid shears with it.</p>
-      <div class="row"><button class="btn ${S.morphTo ? 'ghost' : 'primary'}" data-act="morph">${S.morphTo ? 'Undo A' : 'Apply A'}</button></div>
+  else if (st === 'stretch' && S.sub === 'meet') {
+    const E = ENTRY[S.entry];
+    h = kick('Step 2a · Meet A') + `<h3>A is the shape of the cloud</h3>
+      <p>A is the <b>spread matrix</b> (covariance matrix) of the 10 cities. Its four numbers sum up the shape of the cloud of planets:</p>
+      <div class="toggle">${Object.entries(ENTRY).map(([k, o]) => `<button class="${S.entry === k ? 'on' : ''}" data-act="entry" data-v="${k}">${o.name}</button>`).join('')}</div>
+      <div class="callout"><b>${E.name} = ${A[E.i][E.j].toFixed(2)}</b>. For each city, take ${E.what}. That is one box on the stage. Average the 10 boxes (divide by n − 1 = 9).</div>
+      ${S.entry === 'a12' ? `<p>It is <b>positive</b>: cities with more schooling tend to have more white-collar jobs too, so the cloud leans up and to the right. A negative value would lean it the other way; zero would mean no lean.</p>` : `<p>${S.entry === 'a11' ? 'EDUC’s boxes are big, so the cloud is wide left to right.' : 'WWDRK’s boxes are smaller, so the cloud is thinner up and down.'}</p>`}
+      <p class="note">The two "move together" corners are the same number, so A is <b>symmetric</b>. That will matter in step 3.</p>
+      <div class="row"><button class="btn primary" data-act="sub" data-v="move">What does A do to an arrow? →</button></div>`;
+  }
+  else if (st === 'stretch') h = kick('Step 2b · A moves arrows') + `<h3>Multiplying by A turns and stretches</h3>
+      <p>To multiply an arrow v = (v₁, v₂) by A, take v₁ of A’s first column plus v₂ of its second column. The white arrow (1, 0) lands on the first column: (${A[0][0].toFixed(2)}, ${A[1][0].toFixed(2)}).</p>
+      <p>Press the button to send all 24 arrows through A. The circle becomes an ellipse <b>shaped like the cloud</b>: A pulls every arrow towards the direction the cities spread.</p>
+      <div class="row"><button class="btn ${S.morphTo ? 'ghost' : 'primary'}" data-act="morph">${S.morphTo ? 'Undo A' : 'Apply A'}</button><button class="btn ghost sm" data-act="sub" data-v="meet">← Back to the cloud</button></div>
       <p class="note" style="margin-top:12px">Look closely: most arrows change direction, but along the ellipse’s longest and shortest axes they don’t. Those are the arrows we want.</p>
       <div class="row"><button class="btn primary" data-act="go" data-v="find">Find them →</button></div>`;
   else if (st === 'find') {
@@ -411,7 +472,9 @@ function renderCtrl() {
 $('#ctrl').addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
   const a = b.dataset.act;
-  if (a === 'go') { Sound.unlock(); setStage(b.dataset.v); }
+  if (a === 'go') { Sound.unlock(); S.meetT0 = performance.now(); setStage(b.dataset.v); }
+  else if (a === 'entry') { S.entry = b.dataset.v; S.meetT0 = performance.now(); Sound.select(); renderAll(); }
+  else if (a === 'sub') { S.sub = b.dataset.v; S.meetT0 = performance.now(); Sound.ui(); renderAll(); }
   else if (a === 'morph') { S.morphTo = S.morphTo ? 0 : 1; S.morphTo ? Sound.split() : Sound.ui(); renderCtrl(); }
   else if (a === 'hint' && !S.busy) { const k = S.found[0] ? 1 : 0, from = S.phi, to = EANG[k] + (Math.cos(from - EANG[k]) < 0 ? Math.PI : 0); let d = to - from; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU;
     S.busy = true; const t0 = performance.now(); const step = now => { const u = clamp((now - t0) / 1200, 0, 1); S.phi = from + d * ease(u); if (u < 1) requestAnimationFrame(step); else { S.busy = false; setPhi(to); } }; requestAnimationFrame(step); }
