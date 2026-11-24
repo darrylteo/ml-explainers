@@ -49,6 +49,8 @@ a.btn{text-decoration:none;display:inline-block}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
 .found{color:var(--pass);font:600 15px var(--sans);margin:0 0 10px}
 .note{font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+.fml{margin:0 0 12px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:rgba(6,8,22,.5);overflow-x:auto;font-size:15px}
+.fml .katex-display{margin:2px 0}
 .callout{border:1px solid rgba(255,196,107,.35);background:rgba(255,196,107,.07);border-radius:12px;padding:10px 12px;margin:0 0 12px;font-size:14px;line-height:1.5;color:#ffe2b0}
 .callout b{color:#fff}
 .toggle{display:inline-flex;flex-wrap:wrap;background:rgba(255,255,255,.04);border:1px solid var(--line-strong);border-radius:11px;padding:3px;gap:3px;margin:0 0 12px}
@@ -134,6 +136,17 @@ a.btn{text-decoration:none;display:inline-block}
  n: { name: 'Number of cities n', def: 'The 10 cities from the PCA explainer.', val: 'n = 10' },
  X: { name: 'Data X', def: 'The 10 cities × 2 columns, scaled and centred: one row per planet.' },
  Xt: { name: 'X transposed', def: 'X turned on its side, so XᵀX adds up the products of the columns.' },
+ A11: { name: 'EDUC spread A₁₁', def: 'Top-left entry of A: the variance of EDUC.', val: 'A₁₁ = 1.83' },
+ A22: { name: 'WWDRK spread A₂₂', def: 'Bottom-right entry of A: the variance of WWDRK.', val: 'A₂₂ = 0.85' },
+ A12: { name: 'Move together A₁₂', def: 'The off-diagonal entries of A (both the same): the covariance of EDUC and WWDRK.', val: 'A₁₂ = A₂₁ = 0.95' },
+ zi1: { name: 'EDUC distance zᵢ₁', def: 'How far city i sits from the average EDUC (scaled): + to the right, − to the left. One side of its box.' },
+ zi2: { name: 'WWDRK distance zᵢ₂', def: 'How far city i sits from the average WWDRK (scaled): + above, − below. One side of its box.' },
+ zi: { name: 'City arrow zᵢ', def: 'City i as an arrow from the centre of the cloud: (zᵢ₁, zᵢ₂).' },
+ v1: { name: 'First part v₁', def: 'How far the arrow v goes along EDUC.' },
+ v2: { name: 'Second part v₂', def: 'How far the arrow v goes along WWDRK.' },
+ lam2: { name: 'Second eigenvalue λ₂', def: 'The smaller stretch. It equals the spread of the shadows on PC2.' },
+ vnow: { name: 'Arrow after t pushes', def: 'Where the arrow points after t pushes.' },
+ vnext: { name: 'Arrow after one more push', def: 'Multiply by A, then divide by the length so it is one unit long again.' },
 };</script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
 <script defer src="../shared/math.js"></script>
@@ -169,9 +182,12 @@ const C1 = '#4dffb4', C2 = '#a78bfa', CV = '#6ee7ff', CA = '#ff6fa8';
 const ORDER = ['data', 'stretch', 'find', 'spread', 'repeat'];
 const S = { stage: 'data', reached: 0, busy: false, sub: 'meet', entry: 'a11', meetT0: 0, morph: 0, morphTo: 0, phi: 70 / DEG, found: [false, false], flash: null, spreadPhi: 120 / DEG, pv: 160 / DEG, hist: [], push: null };
 const ENTRY = {
-  a11: { i: 0, j: 0, name: 'EDUC spread', col: '#6ee7ff', what: 'how far each city sits from the average, left or right, squared' },
-  a22: { i: 1, j: 1, name: 'WWDRK spread', col: '#a78bfa', what: 'how far each city sits from the average, up or down, squared' },
-  a12: { i: 0, j: 1, name: 'move together', col: '#ff6fa8', what: 'left–right distance × up–down distance: positive when a city is above average on both or below on both' },
+  a11: { i: 0, j: 0, name: 'EDUC spread', col: '#6ee7ff', what: 'a square whose side is the city’s left–right distance from the average, z<sub>i1</sub>. Its area is z<sub>i1</sub>²',
+    tex: '\\tip{A11}{A_{11}} = \\frac{1}{\\tip{n}{n}-1}\\sum_{i=1}^{\\tip{n}{n}} \\tip{zi1}{z_{i1}}^{2}' },
+  a22: { i: 1, j: 1, name: 'WWDRK spread', col: '#a78bfa', what: 'a square whose side is the city’s up–down distance from the average, z<sub>i2</sub>. Its area is z<sub>i2</sub>²',
+    tex: '\\tip{A22}{A_{22}} = \\frac{1}{\\tip{n}{n}-1}\\sum_{i=1}^{\\tip{n}{n}} \\tip{zi2}{z_{i2}}^{2}' },
+  a12: { i: 0, j: 1, name: 'move together', col: '#ff6fa8', what: 'a rectangle with sides z<sub>i1</sub> (left–right) and z<sub>i2</sub> (up–down). Its area z<sub>i1</sub>·z<sub>i2</sub> is positive (pink) when the city is above average on both or below on both, and negative (blue) otherwise',
+    tex: '\\tip{A12}{A_{12}} = \\frac{1}{\\tip{n}{n}-1}\\sum_{i=1}^{\\tip{n}{n}} \\tip{zi1}{z_{i1}}\\,\\tip{zi2}{z_{i2}}' },
 };
 
 Code.mount('#code', {
@@ -431,13 +447,16 @@ function renderCtrl() {
     h = kick('Step 2a · Meet A') + `<h3>A is the shape of the cloud</h3>
       <p>A is the <b>spread matrix</b> (covariance matrix) of the 10 cities. Its four numbers sum up the shape of the cloud of planets:</p>
       <div class="toggle">${Object.entries(ENTRY).map(([k, o]) => `<button class="${S.entry === k ? 'on' : ''}" data-act="entry" data-v="${k}">${o.name}</button>`).join('')}</div>
-      <div class="callout"><b>${E.name} = ${A[E.i][E.j].toFixed(2)}</b>. For each city, take ${E.what}. That is one box on the stage. Add up the 10 boxes and divide by 9 (one less than the number of cities, as R’s cov() does).</div>
+      <div class="callout">Each city’s box on the stage is ${E.what}. Add up the 10 <b>areas</b>${S.entry === 'a12' ? ' (blue ones count as negative)' : ''} and divide by 9, one less than the number of cities, as R’s cov() does: ${(A[E.i][E.j] * (HC.length - 1)).toFixed(2)} / 9 = <b>${A[E.i][E.j].toFixed(2)}</b>.</div>
+      <div class="fml" data-tex="${E.tex}" data-plain="${E.name} = sum of the 10 areas / (n − 1)"></div>
       ${S.entry === 'a12' ? `<p>It is <b>positive</b>: cities with more schooling tend to have more white-collar jobs too, so the cloud leans up and to the right. A negative value would lean it the other way; zero would mean no lean.</p>` : `<p>${S.entry === 'a11' ? 'EDUC’s boxes are big, so the cloud is wide left to right.' : 'WWDRK’s boxes are smaller, so the cloud is thinner up and down.'}</p>`}
       <p class="note">The two "move together" corners are the same number, so A is <b>symmetric</b>. That will matter in step 3.</p>
       <div class="row"><button class="btn primary" data-act="sub" data-v="move">What does A do to an arrow? →</button></div>`;
   }
   else if (st === 'stretch') h = kick('Step 2b · A moves arrows') + `<h3>Multiplying by A turns and stretches</h3>
-      <p>To multiply an arrow v = (v₁, v₂) by A, take v₁ of A’s first column plus v₂ of its second column. The white arrow (1, 0) lands on the first column: (${A[0][0].toFixed(2)}, ${A[1][0].toFixed(2)}).</p>
+      <p>To multiply an arrow v = (v₁, v₂) by A, take v₁ of A’s first column plus v₂ of its second column:</p>
+      <div class="fml" data-tex="\\tip{A}{A}\\,\\tip{v}{\\vec{v}} = \\tip{v1}{v_1}\\begin{pmatrix}\\tip{A11}{A_{11}} \\\\ \\tip{A12}{A_{12}}\\end{pmatrix} + \\tip{v2}{v_2}\\begin{pmatrix}\\tip{A12}{A_{12}} \\\\ \\tip{A22}{A_{22}}\\end{pmatrix}" data-plain="A·v = v₁·(A₁₁, A₁₂) + v₂·(A₁₂, A₂₂)"></div>
+      <p>The white arrow (1, 0) has v₁ = 1 and v₂ = 0, so it lands on the first column: (${A[0][0].toFixed(2)}, ${A[1][0].toFixed(2)}).</p>
       <p>Press the button to send all 24 arrows through A. The circle becomes an ellipse that <b>points the same way as the cloud</b> (and is even more stretched): A pulls every arrow towards the direction the cities spread.</p>
       <div class="row"><button class="btn ${S.morphTo ? 'ghost' : 'primary'}" data-act="morph">${S.morphTo ? 'Undo A' : 'Apply A'}</button><button class="btn ghost sm" data-act="sub" data-v="meet">← Back to the cloud</button></div>
       <p class="note" style="margin-top:12px">Look closely: most arrows change direction, but along the ellipse’s longest and shortest axes they don’t. Those are the arrows we want.</p>
@@ -445,7 +464,8 @@ function renderCtrl() {
   else if (st === 'find') {
     const n = S.found.filter(Boolean).length;
     h = kick('Step 3 · Find') + `<h3>${n === 2 ? 'Both eigenvectors found' : `Find the arrows A doesn’t turn (${n} / 2)`}</h3>`;
-    if (n < 2) h += `<p><b>Drag</b> to point the cyan arrow v. The pink arrow A·v shows where A sends it. When the two point the same way, v is an <b>eigenvector</b>.</p>
+    if (n < 2) h += `<p><b>Drag</b> to point the cyan arrow v. The pink arrow A·v shows where A sends it. When the two point the same way, v is an <b>eigenvector</b>:</p>
+      <div class="fml" data-tex="\\tip{A}{A}\\,\\tip{v}{\\vec{v}} = \\tip{lam}{\\lambda}\\,\\tip{v}{\\vec{v}}" data-plain="A·v = λ·v"></div>
       <div class="callout">The gold arc is how far A turns v. Make it vanish.</div>
       <div class="row"><button class="btn ghost sm" data-act="hint">Show me one</button></div>`;
     else h += `<p class="found">✓ λ₁ = ${LAM[0].toFixed(2)} and λ₂ = ${LAM[1].toFixed(2)}</p>
@@ -455,19 +475,26 @@ function renderCtrl() {
   } else if (st === 'spread') {
     const q = quad([Math.cos(S.spreadPhi), Math.sin(S.spreadPhi)]);
     h = kick('Step 4 · Spread') + `<h3>The stretch is the spread</h3>
-      <p>The planets are back. For any line, the spread of their shadows is <b>vᵀAv</b>. The gold curve plots it in every direction: it reaches furthest along <b style="color:${C1}">PC1</b>.</p>
+      <p>The planets are back. City i’s shadow on the line through v is z<sub>i</sub>·v, and the spread of the 10 shadows works out to <b>vᵀAv</b>:</p>
+      <div class="fml" data-tex="\\frac{1}{\\tip{n}{n}-1}\\sum_{i=1}^{\\tip{n}{n}} (\\tip{zi}{\\vec{z}_i}\\cdot\\tip{v}{\\vec{v}})^{2} = \\tip{vt}{\\vec{v}^{\\top}}\\,\\tip{A}{A}\\,\\tip{v}{\\vec{v}}" data-plain="(1/(n−1)) Σ (zᵢ·v)² = vᵀ A v"></div>
+      <p>The gold curve plots it in every direction: it reaches furthest along <b style="color:${C1}">PC1</b>.</p>
       <div class="callout">Spread along your line: <b>${q.toFixed(2)}</b> of a possible <b>${LAM[0].toFixed(2)}</b>.</div>
-      <p>So the eigenvalue is the spread on that PC: λ₁ / (λ₁ + λ₂) = <b>${pct(LAM[0] / (LAM[0] + LAM[1]))}</b>, the same 89.8% you found by turning the screen.</p>
+      <p>So the eigenvalue is the spread on that PC, and its share of the total is what PC1 keeps:</p>
+      <div class="fml" data-tex="\\frac{\\tip{lam1}{\\lambda_1}}{\\tip{lam1}{\\lambda_1}+\\tip{lam2}{\\lambda_2}}" data-plain="λ₁ / (λ₁ + λ₂)"></div>
+      <p>${LAM[0].toFixed(2)} / (${LAM[0].toFixed(2)} + ${LAM[1].toFixed(2)}) = <b>${pct(LAM[0] / (LAM[0] + LAM[1]))}</b>, the same share you found by turning the screen.</p>
       <div class="row"><button class="btn primary" data-act="go" data-v="repeat">How does a computer find it? →</button></div>`;
   } else if (st === 'repeat') {
     h = kick('Step 5 · Repeat') + `<h3>Keep pushing</h3>
-      <p>Start with any arrow. Multiply by A, then shrink back to length 1. Each push stretches the PC1 part ${(LAM[0] / LAM[1]).toFixed(1)}× more than the PC2 part, so PC1 quickly takes over.</p>
+      <p>Start with any arrow. Multiply by A, then shrink back to length 1:</p>
+      <div class="fml" data-tex="\\tip{vnext}{\\vec{v}_{t+1}} = \\frac{\\tip{A}{A}\\,\\tip{vnow}{\\vec{v}_t}}{\\lVert \\tip{A}{A}\\,\\tip{vnow}{\\vec{v}_t} \\rVert}" data-plain="v(t+1) = A·v(t) / |A·v(t)|"></div>
+      <p>A multiplies the PC1 part by λ₁ = ${LAM[0].toFixed(2)} and the PC2 part by λ₂ = ${LAM[1].toFixed(2)}, so each push grows the PC1 part ${(LAM[0] / LAM[1]).toFixed(1)}× more than the PC2 part, and PC1 quickly takes over.</p>
       ${S.hist.length ? `<div class="lbl">Degrees away from PC1 after each push</div><div class="hist">${S.hist.map(d => `<span class="${d < 1 ? 'ok' : ''}">${d < 1 ? d.toFixed(2) : d.toFixed(1)}°</span>`).join('')}</div>` : ''}
       <div class="row"><button class="btn primary" data-act="push" ${S.push ? 'disabled' : ''}>Push once (A·v)</button><button class="btn ghost sm" data-act="new">Start somewhere new</button></div>
       <p class="note" style="margin-top:12px">This is the <b>power method</b>, the simplest way to find the top eigenvector. R’s prcomp uses a cleverer method (the singular value decomposition), but the power method shows why the biggest eigenvalue wins.</p>
       <div class="row"><a class="btn ghost sm" href="../pca/#spin">← Back to the planets</a><a class="btn ghost sm" href="../">All explainers</a></div>`;
   }
   $('#ctrl').innerHTML = h;
+  if (window.MathTips) MathTips.render($('#ctrl'));
 }
 $('#ctrl').addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;

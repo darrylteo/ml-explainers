@@ -25,7 +25,8 @@ const plain = tex => tex.replace(/\\tip\{[^{}]*\}/g, '').replace(/[{}\s]/g, '');
 let fails = 0, checked = 0;
 for (const p of pages) {
   const html = fs.readFileSync(new URL(`${p}/index.html`, site), 'utf8');
-  const texes = [...html.matchAll(/data-tex="([^"]*)"/g)].map(m => m[1]);
+  // tex written inside JS strings has every backslash doubled; read it as the page will render it
+  const texes = [...html.matchAll(/data-tex="([^"]*)"/g)].map(m => m[1].replace(/\\\\/g, '\\'));
   if (!texes.length) continue;
   const defs = (html.match(/window\.MATH_TIPS\s*=\s*\{([\s\S]*?)\n\};/) || ['', ''])[1];
   const defined = new Set([...defs.matchAll(/^\s*"?([A-Za-z0-9_]+)"?\s*:/gm)].map(m => m[1]));

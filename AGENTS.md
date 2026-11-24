@@ -37,7 +37,7 @@ npm run dev
 
 ## Tests
 
-`npm test` checks every number the clustering and PCA pages show against R (`tests/reference.json`): the data, `scale`, `hclust` merge/height/order for the raw, scaled and by-hand trees, `cutree` for k = 1–10, the `tapply` means and `prcomp` sdev/rotation/scores. It exits 1 on any mismatch. `tests/notation.mjs` (also in `npm test`) checks every formula on every page: one `\tip` key per distinct symbol (z_ij and z_kj need two), and every key defined in `MATH_TIPS`. `npm run reference` regenerates the JSON from `data/pollution.csv` (needs R with `jsonlite`); if you change the by-hand rows, change them in `tests/reference.R` and `site/shared/pollution.js` together.
+`npm test` checks every number the clustering and PCA pages show against R (`tests/reference.json`): the data, `scale`, `hclust` merge/height/order for the raw, scaled and by-hand trees, `cutree` for k = 1–10, the `tapply` means, `prcomp` sdev/rotation/scores, the eigenvector page's `cov()` and eigenvalues, and PCA step 3's best PC2 when a learner keeps their own PC1. It exits 1 on any mismatch. `tests/notation.mjs` (also in `npm test`) checks every formula on every page: one `\tip` key per distinct symbol (z_ij and z_kj need two), and every key defined in `MATH_TIPS`. `npm run reference` regenerates the JSON from `data/pollution.csv` (needs R with `jsonlite`); if you change the by-hand rows, change them in `tests/reference.R` and `site/shared/pollution.js` together.
 
 ## Rules
 

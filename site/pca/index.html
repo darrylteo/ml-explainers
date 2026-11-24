@@ -239,10 +239,18 @@ const P3 = U.prcomp(T3, P.rSigns.tri);
 const TOT3 = P3.sdev.reduce((s, v) => s + v * v, 0);
 const PVE3 = P3.sdev.map(v => v * v / TOT3);
 const PCV = c => [P3.rotation[0][c], P3.rotation[1][c], P3.rotation[2][c]];
-// the plane left over after PC1: looking straight down PC1, screen-right is PC3's direction and screen-up is PC1 × PC3
-const E1 = PCV(2), E2 = cross3(PCV(0), PCV(2));
-const RES = T3.map(p => [dot3(p, E1), dot3(p, E2)]);
-const BETA = lineAng([dot3(PCV(1), E1), dot3(PCV(1), E2)]);
+// the plane left over after PC1 (R's, or the learner's own line): looking straight down it, screen-right is PC3's
+// direction made square to PC1, and screen-up is PC1 × that. BETA is the best screen in that plane.
+let RES, BETA, V1;
+const pc1Dir = () => S.pc1v || PCV(0);
+function setPC1(v) {
+  S.pc1v = v ? norm3(v) : null;
+  const f = pc1Dir(), p3 = PCV(2), e1 = norm3(p3.map((x, i) => x - dot3(p3, f) * f[i])), e2 = cross3(f, e1);
+  RES = T3.map(p => [dot3(p, e1), dot3(p, e2)]);
+  let a = 0, b = 0, c = 0; RES.forEach(([x, y]) => { a += x * x; b += y * y; c += x * y; });
+  const h = .5 * Math.atan2(2 * c, a - b);   // where a cos² + 2c cos sin + b sin² peaks
+  BETA = lineAng([Math.cos(h), Math.sin(h)]); V1 = var3(f);
+}
 const PF = U.prcomp(Z, P.rSigns.full);
 const LAMF = PF.sdev.map(v => v * v);
 const SHOWN = P.cols.map((_, j) => PF.rotation[j][0] ** 2 * LAMF[0] + PF.rotation[j][1] ** 2 * LAMF[1]);   // share of column j the map can show
@@ -284,15 +292,16 @@ const ORDER = ['data', 'spin', 'three', 'all', 'map'];
 const S = {
   stage: 'data', reached: 0, busy: false, hover: -1, flashes: [],
   // step 2
-  th: 100 / DEG, seen: new Uint8Array(180), near: false, found: false, lockKept: null, pc2: null, pc2T0: 0, light: 'pc1',
-  // step 3
-  q: [1, 0, 0, 0], qAnim: null, idle: true, p3: 'pick1', lock1: null,
-  alpha: 25 / DEG, seen2: new Uint8Array(180), near2: false, found2: false, lock2: null, pc3: null, pc3T0: 0, light3: 'pc2', view: null,
+  th: 100 / DEG, seen: new Uint8Array(180), near: false, found: false, own1: false, lockKept: null, pc2: null, pc2T0: 0, light: 'pc1',
+  // step 3 (pc1v: the learner's own PC1 when they lock in a line that is not R's)
+  q: [1, 0, 0, 0], qAnim: null, idle: true, p3: 'pick1', lock1: null, pc1v: null, p2T0: -1e9, outT0: 0,
+  alpha: 25 / DEG, seen2: new Uint8Array(180), near2: false, found2: false, own2: false, lock2: null, pc3: null, pc3T0: 0, light3: 'pc2', view: null,
   // step 4
   pc: 0, keep: 2,
   // step 5
   mode: 'land', colJ: col('POOR'), colour: 'none', hoverVar: -1, unfoldT0: 0, game: null, tally: [],
 };
+setPC1(null);
 
 /* ---------------- code panel: there for those who want it, folded away by default ---------------- */
 Code.mount('#code', {
@@ -432,8 +441,8 @@ function sun(x, y, t, a) {
  * planet floats from the screen, as with a real sun of finite size.
  */
 function screenSystem(L, pts, ang, o, t) {
-  const c = Math.cos(ang), s = Math.sin(ang), R = o.R, len = 2400 * o.grow, nx = -s, ny = -c;
-  const Dp = edgeDist(L, nx, ny) - 34, Dm = edgeDist(L, -nx, -ny) - 34;
+  const c = Math.cos(ang), s = Math.sin(ang), R = o.R, len = 2400 * o.grow, nx = -s, ny = -c, pull = o.pull || 1;   // pull > 1: suns still flying in from off-screen
+  const Dp = (edgeDist(L, nx, ny) - 34) * pull, Dm = (edgeDist(L, -nx, -ny) - 34) * pull;
   if (o.lit > 0) {
     ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(-ang);
     // sunlight fills each side; past the sun the gradient just holds its strongest colour, so there is no edge
@@ -444,7 +453,7 @@ function screenSystem(L, pts, ang, o, t) {
     ctx.restore();
   }
   const half = Math.min(len, 2400);
-  beam(L.cx - c * half, L.cy + s * half, L.cx + c * half, L.cy - s * half, o.col, o.glow ? 3 : 2.2, .35 + .65 * Math.max(o.lit, .3));
+  beam(L.cx - c * half, L.cy + s * half, L.cx + c * half, L.cy - s * half, o.col, o.glow ? 3 : 2.2, (.35 + .65 * Math.max(o.lit, .3)) * (o.fade ?? 1));
   ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(-ang);
   pts.forEach(([x, y]) => {
     const u = (x * c + y * s) * L.s, w = (-x * s + y * c) * L.s, dist = Math.abs(w), py = -w, dir = py < 0 ? 1 : -1;
@@ -466,19 +475,79 @@ function screenSystem(L, pts, ang, o, t) {
   if (o.lit > 0) { sun(L.cx + nx * Dp, L.cy + ny * Dp, t, o.lit); sun(L.cx - nx * Dm, L.cy - ny * Dm, t, o.lit); }
   return { nx, ny };
 }
-function planet(x, y, R, lx, ly, hv) {
-  FX.glow(ctx, x, y, R * 2.4, '#8fb0ff', .25);
-  const g = ctx.createRadialGradient(x + lx * R * .45, y + ly * R * .45, 1, x, y, R);
-  g.addColorStop(0, '#ffffff'); g.addColorStop(.3, '#cfdcff'); g.addColorStop(.75, '#5468b0'); g.addColorStop(1, '#151b45');
+/*
+ * Planets: each has its own look (banded gas giant, cratered rock or swirled ice), painted once into a small sprite.
+ * Every frame only adds the lighting: a night side facing away from the nearer sun and a warm sunlit rim.
+ */
+const LOOKS = [
+  { type: 'gas', base: '#e6b07a', band: '#9c5f3a' }, { type: 'ice', base: '#9fd8ff', band: '#f2fbff' },
+  { type: 'rock', base: '#c0705a', band: '#6e3427' }, { type: 'gas', base: '#c9a6ff', band: '#6a4bb8', ring: true },
+  { type: 'rock', base: '#a3abbd', band: '#4b5263' }, { type: 'gas', base: '#7fe0c0', band: '#2f8a72' },
+  { type: 'ice', base: '#b8c4ff', band: '#ffffff' }, { type: 'gas', base: '#ffcf8a', band: '#c7793c', ring: true },
+  { type: 'rock', base: '#d99a6c', band: '#7a4a2c' }, { type: 'gas', base: '#ff9fbf', band: '#a3466a' },
+];
+const SPRITES = new Map();
+const rng = seed => () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+function planetSprite(k, R) {
+  const key = `${k}|${R}|${DPR}`; let c = SPRITES.get(key); if (c) return c;
+  const look = LOOKS[k], rnd = rng(k * 7919 + 17), sz = Math.ceil(2 * R * DPR);
+  c = document.createElement('canvas'); c.width = c.height = sz; const g = c.getContext('2d');
+  g.scale(sz / (2 * R), sz / (2 * R)); g.translate(R, R);
+  g.beginPath(); g.arc(0, 0, R, 0, TAU); g.clip();
+  g.fillStyle = look.base; g.fillRect(-R, -R, 2 * R, 2 * R);
+  g.rotate((rnd() - .5) * .6);
+  if (look.type === 'gas') for (let i = 0; i < 7; i++) {
+    const y = -R + (i + rnd() * .6) * 2 * R / 7, h = R * (.1 + rnd() * .2);
+    g.globalAlpha = .3 + rnd() * .4; g.fillStyle = i % 2 ? look.band : '#fff6e6';
+    g.beginPath(); g.moveTo(-R * 1.3, y);
+    for (let x = -R * 1.3; x <= R * 1.3; x += R / 5) g.lineTo(x, y + Math.sin(x / R * 3 + i * 1.7) * h * .35);
+    g.lineTo(R * 1.3, y + h); g.lineTo(-R * 1.3, y + h); g.closePath(); g.fill();
+  } else if (look.type === 'rock') for (let i = 0; i < 7; i++) {
+    const x = (rnd() * 2 - 1) * R * .75, y = (rnd() * 2 - 1) * R * .75, r = R * (.1 + rnd() * .2);
+    g.globalAlpha = .5; g.fillStyle = look.band; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    g.globalAlpha = .35; g.strokeStyle = '#fff'; g.lineWidth = R * .05; g.beginPath(); g.arc(x, y, r, Math.PI * 1.1, Math.PI * 1.7); g.stroke();
+  } else for (let i = 0; i < 5; i++) {
+    g.globalAlpha = .4; g.strokeStyle = look.band; g.lineWidth = R * (.06 + rnd() * .08);
+    g.beginPath(); g.ellipse((rnd() - .5) * R, (rnd() - .5) * R, R * (.5 + rnd() * .6), R * (.15 + rnd() * .2), rnd() * Math.PI, 0, Math.PI * (1 + rnd())); g.stroke();
+  }
+  SPRITES.set(key, c); return c;
+}
+function ringArc(x, y, R, look, front) {
+  const a0 = front ? 0 : Math.PI, a1 = front ? Math.PI : TAU;   // the front half passes below the planet
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-.35);
+  ctx.globalAlpha = .8; ctx.strokeStyle = look.band; ctx.lineWidth = R * .22; ctx.beginPath(); ctx.ellipse(0, 0, R * 1.75, R * .5, 0, a0, a1); ctx.stroke();
+  ctx.globalAlpha = .5; ctx.strokeStyle = look.base; ctx.lineWidth = R * .1; ctx.beginPath(); ctx.ellipse(0, 0, R * 1.42, R * .4, 0, a0, a1); ctx.stroke();
+  ctx.restore();
+}
+function planet(x, y, R, lx, ly, hv, k = 0) {
+  const look = LOOKS[k % LOOKS.length], ring = look.ring && R >= 8;
+  FX.glow(ctx, x, y, R * 2.4, look.base, .22);
+  if (ring) ringArc(x, y, R, look, false);
+  ctx.drawImage(planetSprite(k % LOOKS.length, R), x - R, y - R, 2 * R, 2 * R);
+  const sx = x + lx * R * .55, sy = y + ly * R * .55, g = ctx.createRadialGradient(sx, sy, R * .2, sx, sy, R * 1.75);
+  g.addColorStop(0, 'rgba(2,3,14,0)'); g.addColorStop(.42, 'rgba(2,3,14,0)'); g.addColorStop(.7, 'rgba(2,3,14,.6)'); g.addColorStop(1, 'rgba(2,3,14,.93)');
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.fill();
+  const a = Math.atan2(ly, lx), lw = Math.max(1, R * .14);
+  ctx.strokeStyle = 'rgba(255,226,170,.75)'; ctx.lineWidth = lw; ctx.beginPath(); ctx.arc(x, y, R - lw / 2, a - 1.1, a + 1.1); ctx.stroke();
+  if (ring) ringArc(x, y, R, look, true);
   if (hv) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y, R + 5, 0, TAU); ctx.stroke(); }
 }
-// sc: { pts, ids, R, slices, th, near, found, p2, light ('a'|'b'), colA, colB, varAt, total, best, seen, bars, meter, axes, centre }
+// the step 3 camera's scale and centre, so the 3-D cloud can glide into the shadow scene
+const cam3 = () => { const R = Math.max(...T3.map(p => Math.hypot(...p))); return { cx: W / 2, cy: H / 2 + 18, s: Math.min(W, H) * .36 / R }; };
+// sc: { pts, ids, R, slices, th, near, found, p2, light ('a'|'b'), colA, colB, varAt, total, best, seen, bars, meter, axes, centre, ghost, intro }
 function drawScene(t, sc) {
-  const L = SP = sceneLayout(sc.pts), th = sc.th, p2 = sc.p2;
-  const lit2 = p2 > 0 && sc.light === 'b' ? p2 : 0, lit1 = 1 - lit2;
-  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, L.bot + 4); ctx.clip();
-  ctx.strokeStyle = 'rgba(140,160,255,.1)'; ctx.lineWidth = 1;
+  const k3 = sc.intro == null ? 1 : ease(sc.intro);   // 0 = still the 3-D view, 1 = the full shadow scene
+  let L = sceneLayout(sc.pts);
+  if (k3 < 1) { const C = cam3(); L = { ...L, cx: lerp(C.cx, L.cx, k3), cy: lerp(C.cy, L.cy, k3), s: lerp(C.s, L.s, k3) }; }
+  SP = L;
+  const th = sc.th, p2 = sc.p2;
+  const lit2 = p2 > 0 && sc.light === 'b' ? p2 : 0, lit1 = (1 - lit2) * k3;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, k3 < 1 ? H : L.bot + 4); ctx.clip();
+  if (k3 < 1) {   // the 3-D grid fades out as the suns arrive
+    ctx.strokeStyle = `rgba(110,231,255,${.07 * (1 - k3)})`; ctx.lineWidth = 1;
+    for (let g = -5; g <= 5; g++) { ctx.beginPath(); ctx.moveTo(L.cx + g * L.s, 0); ctx.lineTo(L.cx + g * L.s, H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, L.cy + g * L.s); ctx.lineTo(W, L.cy + g * L.s); ctx.stroke(); }
+  }
+  ctx.strokeStyle = `rgba(140,160,255,${.1 * k3})`; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, L.cy); ctx.lineTo(W, L.cy); ctx.moveTo(L.cx, L.top); ctx.lineTo(L.cx, L.bot); ctx.stroke();
   if (sc.axes) {
     ctx.font = '600 12px Space Grotesk, sans-serif'; ctx.fillStyle = 'rgba(170,179,220,.8)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
@@ -486,19 +555,27 @@ function drawScene(t, sc) {
   }
   if (p2 > 0) screenSystem(L, sc.pts, th + Math.PI / 2, { lit: lit2, col: sc.colB, grow: p2, R: sc.R, slices: sc.slices }, t);
   const good = sc.found || sc.near;
-  const n1 = screenSystem(L, sc.pts, th, { lit: lit1, col: good ? sc.colFound : sc.colA, grow: 1, R: sc.R, slices: sc.slices, glow: sc.near && !sc.found }, t);
+  const n1 = screenSystem(L, sc.pts, th, { lit: lit1, col: good ? sc.colFound : sc.colA, grow: 1, R: sc.R, slices: sc.slices, glow: sc.near && !sc.found, pull: 1 + 1.6 * (1 - k3), fade: k3 }, t);
   const c = Math.cos(th), s = Math.sin(th);
+  if (sc.ghost != null) {   // the learner kept their own line: dash in the best one for comparison
+    const gc = Math.cos(sc.ghost), gs = Math.sin(sc.ghost);
+    ctx.save(); ctx.setLineDash([7, 9]); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(L.cx - gc * 2400, L.cy + gs * 2400); ctx.lineTo(L.cx + gc * 2400, L.cy - gs * 2400); ctx.stroke(); ctx.restore();
+  }
   sc.pts.forEach(([x, y], k) => {
     const px = L.cx + x * L.s, py = L.cy - y * L.s;
     const side = lit2 > .5 ? Math.sign(c * x + s * y) || 1 : Math.sign(-x * s + y * c) || 1;
-    planet(px, py, sc.R, lit2 > .5 ? side * c : side * n1.nx, lit2 > .5 ? -side * s : side * n1.ny, sc.ids && S.hover === sc.ids[k]);
+    if (k3 < 1) { ctx.globalAlpha = 1 - k3; FX.ball(ctx, null, { x: px, y: py, r: 4.2 }, HAND.includes(k) ? '#6ee7ff' : STAR, { glow: true }); ctx.globalAlpha = k3; }
+    planet(px, py, sc.R, lit2 > .5 ? side * c : side * n1.nx, lit2 > .5 ? -side * s : side * n1.ny, sc.ids && S.hover === sc.ids[k], k);
+    ctx.globalAlpha = 1;
   });
+  if (sc.ghost != null) { const gc = Math.cos(sc.ghost), gs = Math.sin(sc.ghost), D = Math.min(W * .4, (L.bot - L.top) * .42); const sg = gs > 0 ? -1 : 1; label(sc.ghostLab, L.cx + sg * gc * D, L.cy - sg * gs * D + 16, '#fff', 'center'); }   // on the lower end, clear of the meter
   if (sc.centre) { FX.glow(ctx, L.cx, L.cy, 40, C1, .9); label(sc.centre, L.cx + 14, L.cy + 18, C1); }
   if (sc.ids) placeLabels(sc.pts.map(([x, y], k) => ({ x: L.cx + x * L.s, y: L.cy - y * L.s, t: '#' + (sc.ids[k] + 1), on: S.hover === sc.ids[k] })), [{ x: 0, y: 0, w: 320, h: 84 }]);
   ctx.restore();
   sc.meter(p2);
   if (!sc.found) label(sc.near ? 'widest! lock it in' : `screen at ${((th * DEG) % 180).toFixed(0)}°`, W - 12, 22, sc.near ? C1 : '#c9d0f5', 'right');
-  drawStrip(L, sc, p2);
+  if (k3 < 1) { ctx.save(); ctx.globalAlpha = k3; drawStrip(L, sc, p2); ctx.restore(); } else drawStrip(L, sc, p2);
   S.flashes = S.flashes.filter(f => t - f.t0 < 1100);
   S.flashes.forEach(f => { const k = (t - f.t0) / 1100; FX.glow(ctx, L.cx, L.cy, 80 + k * 500, sc.colFound, .5 * (1 - k)); });
 }
@@ -535,15 +612,18 @@ function drawStrip(L, sc, p2) {
 }
 function spinScene(t) {
   const p2 = S.pc2 == null ? 0 : ease(clamp((t - S.pc2T0) / 900, 0, 1));
-  return { pts: HC, ids: HAND, R: 9, slices: 14, th: S.th, near: S.near, found: S.found, p2, light: S.light === 'pc2' ? 'b' : 'a',
+  return { pts: HC, ids: HAND, R: 11, slices: 14, th: S.th, near: S.near, found: S.found, p2, light: S.light === 'pc2' ? 'b' : 'a',
+    ghost: S.found && S.own1 ? TH_STAR : null, ghostLab: 'best: PC1',
     colA: '#6ee7ff', colFound: C1, colB: C2, varAt: spinVar, total: TOT2, best: TH_STAR, seen: S.seen, bars: true, axes: ['EDUC →', '↑ WWDRK'],
     meter: p => p > 0 ? meter(12, 10, Math.min(300, W * .55), [{ v: spinVar(S.th), col: C1, lab: 'PC1' }, { v: (TOT2 - spinVar(S.th)) * p, col: C2, lab: 'PC2' }], TOT2, 'SPREAD KEPT')
       : meter(12, 10, Math.min(300, W * .55), [{ v: spinVar(S.th), col: S.found || S.near ? C1 : '#6ee7ff', lab: 'screen' }], TOT2, 'SPREAD KEPT BY THE SCREEN') };
 }
 function residualScene(t) {
-  const p3 = S.pc3 == null ? 0 : ease(clamp((t - S.pc3T0) / 900, 0, 1)), v1 = TOT3 * PVE3[0];
-  return { pts: RES, ids: null, R: 5, slices: 6, th: S.alpha, near: S.near2, found: S.found2, p2: p3, light: S.light3 === 'pc3' ? 'b' : 'a',
-    colA: '#c9b6ff', colFound: C2, colB: C3, varAt: resVar, total: TOT3 * (1 - PVE3[0]), best: BETA, seen: S.seen2, bars: false, centre: 'PC1 points at you',
+  const p3 = S.pc3 == null ? 0 : ease(clamp((t - S.pc3T0) / 900, 0, 1)), v1 = V1;
+  const intro = S.p3 === 'leaving' ? 1 - clamp((t - S.outT0) / 1100, 0, 1) : clamp((t - S.p2T0) / 2000, 0, 1);
+  return { pts: RES, ids: null, R: 5, slices: 6, th: S.alpha, near: S.near2, found: S.found2, p2: p3, light: S.light3 === 'pc3' ? 'b' : 'a', intro,
+    ghost: S.found2 && S.own2 ? BETA : null, ghostLab: 'best: PC2',
+    colA: '#c9b6ff', colFound: C2, colB: C3, varAt: resVar, total: TOT3 - V1, best: BETA, seen: S.seen2, bars: false, centre: 'PC1 points at you',
     meter: p => meter(12, 10, Math.min(340, W * .6), [{ v: v1, col: C1, lab: 'PC1' }, { v: resVar(S.alpha), col: S.found2 || S.near2 ? C2 : '#c9b6ff', lab: 'PC2' }, ...(p > 0 ? [{ v: (TOT3 - v1 - resVar(S.alpha)) * p, col: C3, lab: 'PC3' }] : [])], TOT3, 'SPREAD KEPT OF ALL 3 COLUMNS') };
 }
 // turning a screen: light up the curve where the learner has looked, and say when they are at the widest
@@ -564,11 +644,25 @@ async function turnAnim(which, to, dur = 1300) {
   S.busy = true; await animate(dur, u => turnTo(which, from + d * ease(u))); S.busy = false;
 }
 async function lockIn(which) {
-  const kept = which === 1 ? spinVar(S.th) / TOT2 : resVar(S.alpha) / TOT3;
-  if (which === 1) S.lockKept = kept; else S.lock2 = kept;
-  await turnAnim(which, which === 1 ? TH_STAR : BETA, 900);
+  const a = which === 1 ? S.th : S.alpha, best = which === 1 ? TH_STAR : BETA;
+  const kept = which === 1 ? spinVar(a) / TOT2 : resVar(a) / TOT3, exact = lineDiff(a, best) * DEG < 1.5;
+  if (which === 1) { S.lockKept = kept; S.own1 = !exact; } else { S.lock2 = kept; S.own2 = !exact; }
+  if (exact) await turnAnim(which, best, 500);   // a hair off the best: settle exactly on it
   if (which === 1) { S.found = true; Code.focus(['rot']); } else S.found2 = true;
+  S.flashes.push({ t0: performance.now() }); exact ? Sound.verdict(true) : Sound.select(); renderCtrl(); renderTable();
+}
+// back from the learner's own line to the best one
+async function useBest(which) {
+  if (which === 1) S.own1 = false; else S.own2 = false;
+  await turnAnim(which, which === 1 ? TH_STAR : BETA, 900);
   S.flashes.push({ t0: performance.now() }); Sound.verdict(true); renderCtrl(); renderTable();
+}
+// PC1 and PC2 shadows of planet k: R's prcomp, or the learner's own screen (signs matched to R's)
+function scores2(k) {
+  if (!S.own1) return PH.x[k];
+  const c = Math.cos(S.th), s = Math.sin(S.th), [x, y] = HC[k], r = PH.rotation;
+  const s1 = Math.sign(c * r[0][0] + s * r[1][0]) || 1, s2 = Math.sign(-s * r[0][1] + c * r[1][1]) || 1;
+  return [s1 * (c * x + s * y), s2 * (-s * x + c * y)];
 }
 async function sweep(which) {
   S.busy = true; renderCtrl();
@@ -604,11 +698,12 @@ function draw3(t) {
       ctx.fillStyle = colr; ctx.beginPath(); ctx.arc(x, cy, 2.2, 0, TAU); ctx.fill();
     });
   }
-  const shown = S.p3 === 'pick1' ? [] : S.p3 === 'done' ? [0, 1, 2] : [0];
+  const shown = S.p3 === 'pick1' ? [] : S.p3 === 'done' ? [0, 1, 2] : [0], mine = S.p3 !== 'done' && S.pc1v;
   shown.forEach(k => {
-    const v = PCV(k), b = v.map(x => x * 3.2), a = v.map(x => x * -3.2), colr = [C1, C2, C3][k];
-    if (Math.hypot(PX(b) - cx, PY(b) - cy) < 14) { FX.glow(ctx, cx, cy, 36, colr, .8); label(`PC${k + 1} points at you`, cx + 16, cy - 20, colr); }
-    else { beam(PX(a), PY(a), PX(b), PY(b), colr, 1.8, .95); label(`PC${k + 1} · ${pct(PVE3[k])}`, PX(b) + 8, PY(b), colr); }
+    const v = k === 0 && mine ? S.pc1v : PCV(k), b = v.map(x => x * 3.2), a = v.map(x => x * -3.2), colr = [C1, C2, C3][k];
+    const nm = k === 0 && mine ? 'your PC1' : `PC${k + 1}`, kept = k === 0 && mine ? V1 / TOT3 : PVE3[k];
+    if (Math.hypot(PX(b) - cx, PY(b) - cy) < 14) { FX.glow(ctx, cx, cy, 36, colr, .8); label(`${nm} points at you`, cx + 16, cy - 20, colr); }
+    else { beam(PX(a), PY(a), PX(b), PY(b), colr, 1.8, .95); label(`${nm} · ${pct(kept)}`, PX(b) + 8, PY(b), colr); }
   });
   const pts = T3.map((p, i) => ({ i, x: PX(p), y: PY(p), d: dot3(p, f) })).sort((a, b) => b.d - a.d);
   pts.forEach(q => {
@@ -620,7 +715,7 @@ function draw3(t) {
   const mw = Math.min(320, W * .6);
   if (S.p3 === 'pick1') { meter(12, 10, mw, [{ v: var3(r), col: near1 ? C1 : '#6ee7ff', lab: 'this line' }], TOT3, 'SPREAD ON THE LINE'); if (near1) label('widest! lock it in', W - 12, 22, C1, 'right'); }
   else if (S.p3 === 'done') meter(12, 10, mw, [{ v: TOT3 - var3(f), col: '#6ee7ff', lab: 'this wall' }], TOT3, 'THE WALL SHOWS');
-  else meter(12, 10, mw, [{ v: TOT3 * PVE3[0], col: C1, lab: 'PC1' }], TOT3, 'SPREAD KEPT');
+  else meter(12, 10, mw, [{ v: V1, col: C1, lab: 'PC1' }], TOT3, 'SPREAD KEPT');
   if (S.near1 !== near1) { S.near1 = near1; if (near1) Sound.complete(); renderCtrlSoon(); }
 }
 function animQ(to, dur = 1500, done) { S.qAnim = { from: S.q.slice(), to, t0: performance.now(), dur, done }; S.idle = false; }
@@ -798,7 +893,7 @@ function frame(t) {
   if (!W || cv.classList.contains('hide')) return;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, W, H);
   if (S.stage === 'spin') drawScene(t, spinScene(t));
-  else if (S.stage === 'three') { if (S.p3 === 'pick2') drawScene(t, residualScene(t)); else draw3(t); }
+  else if (S.stage === 'three') { if (S.p3 === 'pick2' || S.p3 === 'leaving') drawScene(t, residualScene(t)); else draw3(t); }
   else if (S.stage === 'map') drawMap(t);
 }
 let dragging = false;
@@ -832,7 +927,7 @@ function renderTable() {
   if (!big) {
     $('#tblSub').textContent = 'hover a row to find its planet';
     h += '<th>EDUC<small>school years</small></th><th>WWDRK<small>% white collar</small></th>' + (S.found ? '<th>PC1<small>shadow</small></th>' : '') + (S.pc2 != null ? '<th>PC2<small>shadow</small></th>' : '');
-    rows = HAND.map((i, k) => `<tr data-i="${i}"><td class="idx">#${i + 1}</td><td>${P.rows[i][iE]}</td><td>${P.rows[i][iW]}</td>${S.found ? `<td class="pc">${f2(PH.x[k][0])}</td>` : ''}${S.pc2 != null ? `<td class="pc">${f2(PH.x[k][1])}</td>` : ''}</tr>`);
+    rows = HAND.map((i, k) => `<tr data-i="${i}"><td class="idx">#${i + 1}</td><td>${P.rows[i][iE]}</td><td>${P.rows[i][iW]}</td>${S.found ? `<td class="pc">${f2(scores2(k)[0])}</td>` : ''}${S.pc2 != null ? `<td class="pc">${f2(scores2(k)[1])}</td>` : ''}</tr>`);
   } else if (st === 'three') {
     $('#tblSub').textContent = '★ = the 10 from step 2';
     h += '<th>EDUC</th><th>WWDRK</th><th>HOUS<small>% sound housing</small></th>';
@@ -899,18 +994,19 @@ function renderCtrl() {
         <p>Two suns shine straight at the screen, one from each side. Every planet casts a shadow on it. <b>Drag to turn the screen</b> and spread the shadows as far apart as you can.</p>
         <div class="callout ${S.near ? 'win' : ''}">${S.near ? `<b>That’s the widest!</b> No angle keeps more than ${pct(spinVar(TH_STAR) / TOT2)}. Lock it in.` : `Spread kept now: <b>${pct(spinVar(S.th) / TOT2)}</b>. It is the <b>average squared distance</b> of all 10 shadows from the centre, so every planet counts, not just the two at the ends. The cyan part of each bar below is that planet’s shadow².`}</div>
         <p class="note">Planets far from the screen cast blurry shadows: that blur is what the screen cannot show.</p>
-        <div class="row"><button class="btn ${S.near ? 'primary glow' : ''}" data-act="lock1s" ${S.busy ? 'disabled' : ''}>Lock in this screen</button><button class="btn ghost sm" data-act="sweep" ${S.busy ? 'disabled' : ''}>Sweep all angles</button><button class="btn ghost sm" data-act="snap" ${S.busy ? 'disabled' : ''}>Show me PC1</button></div>`;
+        <div class="row"><button class="btn primary" data-act="lock1s" ${S.busy ? 'disabled' : ''}>Lock in this screen</button><button class="btn ghost sm" data-act="sweep" ${S.busy ? 'disabled' : ''}>Sweep all angles</button><button class="btn ghost sm" data-act="snap" ${S.busy ? 'disabled' : ''}>Show me PC1</button></div>`;
     } else if (S.pc2 == null) {
       const best = spinVar(TH_STAR) / TOT2;
-      h += `<h3>You found PC1</h3><p class="found">✓ ${S.lockKept != null && S.lockKept < best - .001 ? `Your screen kept ${pct(S.lockKept)}; PC1 keeps ${pct(best)}, so we turned it onto PC1.` : `This screen keeps ${pct(best)}: no angle keeps more.`}</p>
-        <p>That direction is <b>PC1</b>. Each planet’s shadow on it is its <b>PC1 score</b> (new column in the table).</p>
+      h += `<h3>${S.own1 ? 'Your PC1 is locked in' : 'You found PC1'}</h3><p class="found">✓ ${S.own1 ? `Your screen keeps ${pct(spinVar(S.th) / TOT2)}. The best screen, R’s PC1 (dashed), keeps ${pct(best)}.` : `This screen keeps ${pct(best)}: no angle keeps more.`}</p>
+        <p>That direction is ${S.own1 ? '<b>your PC1</b>' : '<b>PC1</b>'}. Each planet’s shadow on it is its <b>PC1 score</b> (new column in the table).</p>
         <p>The pink part of each bar is what PC1 missed. In 2-D only <b>one</b> direction is at right angles to PC1, so there is nothing left to choose.</p>
-        <div class="row"><button class="btn primary" data-act="pc2">Add PC2</button><button class="btn ghost sm" data-act="unfind">Spin again</button></div>
+        <div class="row"><button class="btn primary" data-act="pc2">Add PC2</button>${S.own1 ? '<button class="btn ghost sm" data-act="best1">Turn to R’s PC1</button>' : ''}<button class="btn ghost sm" data-act="unfind">Spin again</button></div>
         <p class="note" style="margin-top:12px">Why can a computer find PC1 instantly? It is an <b>eigenvector</b>. <a href="../eigenvectors/" style="color:var(--accent)">See how →</a></p>`;
     } else {
-      const best = spinVar(TH_STAR) / TOT2;
-      h += `<h3>PC2 catches the rest</h3><p class="found">PC1 ${pct(best)} + PC2 ${pct(1 - best)} = 100%</p>
+      const best = spinVar(TH_STAR) / TOT2, mine = spinVar(S.th) / TOT2;
+      h += `<h3>PC2 catches the rest</h3><p class="found">PC1 ${pct(mine)} + PC2 ${pct(1 - mine)} = 100%</p>
         <p>PC2 sits at right angles to PC1, with its own pair of suns. Its shadows catch exactly the part PC1 lost: every bar is now fully coloured.</p>
+        ${S.own1 ? `<p class="note">Your PC1 is not the widest, so your PC2 carries ${pct(1 - mine)}. With R’s PC1 it would carry only ${pct(1 - best)}: PCA puts as much as it can into PC1.</p><div class="row"><button class="btn ghost sm" data-act="best1">Turn to R’s PC1</button></div>` : ''}
         <div class="lbl">Light up</div>
         <div class="toggle"><button class="${S.light === 'pc1' ? 'on' : ''}" data-act="light" data-v="pc1">PC1’s suns</button><button class="${S.light === 'pc2' ? 'on' : ''}" data-act="light" data-v="pc2">PC2’s suns</button></div>
         <p class="note">Two columns in, two PCs out: nothing is lost, the axes are just turned. The saving comes when we keep fewer PCs than columns.</p>
@@ -960,21 +1056,23 @@ function threeCtrl() {
     return `<h3>Find PC1 in 3-D</h3>
       <p>We add <b>HOUS</b> (% sound housing) and use all 60 cities. The line across the screen is your candidate. <b>Drag to orbit the cloud</b> until the shadows on the line spread the most.</p>
       <div class="callout ${S.near1 ? 'win' : ''}">${S.near1 ? `<b>That’s the widest!</b> ${pct(v)} of the spread. Lock it in.` : `This line keeps <b>${pct(v)}</b> of the spread.`}</div>
-      <div class="row"><button class="btn ${S.near1 ? 'primary glow' : 'primary'}" data-act="lock1">Lock in this line</button><button class="btn ghost sm" data-act="show1">Show me PC1</button></div>`;
+      <div class="row"><button class="btn primary" data-act="lock1">Lock in this line</button><button class="btn ghost sm" data-act="show1">Show me PC1</button></div>`;
   }
-  if (S.p3 === 'look1') return `<h3>PC1 is locked</h3><p class="found">${S.lock1 > PVE3[0] - .004 ? `Spot on: ${pct(PVE3[0])}.` : `Your line kept ${pct(S.lock1)}; PC1 keeps ${pct(PVE3[0])}, so we turned it onto PC1.`}</p>
-      <p>Now <b>look straight down PC1</b>. Everything PC1 explains collapses into a point, and the cities become a flat picture of what is left: exactly the 2-D game from step 2.</p>
-      <div class="row"><button class="btn primary" data-act="look1">Look along PC1</button></div>`;
+  if (S.p3 === 'look1') return `<h3>${S.pc1v ? 'Your PC1 is locked in' : 'PC1 is locked in'}</h3><p class="found">✓ ${S.pc1v ? `Your line keeps ${pct(V1 / TOT3)}. The best line, R’s PC1, keeps ${pct(PVE3[0])}.` : `PC1 keeps ${pct(PVE3[0])}: no line keeps more.`}</p>
+      <p>Now <b>look straight down ${S.pc1v ? 'your' : ''} PC1</b>. Everything it explains collapses into a point, and the cities become a flat picture of what is left: exactly the 2-D game from step 2.</p>
+      <div class="row"><button class="btn primary" data-act="look1">Look along ${S.pc1v ? 'your' : ''} PC1</button>${S.pc1v ? '<button class="btn ghost sm" data-act="best3">Use R’s PC1</button>' : ''}</div>`;
   if (S.p3 === 'looking') return `<h3>Turning to look down PC1…</h3>`;
+  if (S.p3 === 'leaving') return `<h3>Stepping back out to 3-D…</h3>`;
   if (S.p3 === 'pick2') {
     if (!S.found2) return `<h3>Now pick PC2</h3>
       <p>PC1 points straight at you. The planets show what PC1 could not catch. Same game as step 2: <b>drag to turn the screen</b>.</p>
-      <div class="callout ${S.near2 ? 'win' : ''}">${S.near2 ? `<b>That’s the widest!</b> PC2 adds ${pct(PVE3[1])}. Lock it in.` : `This screen adds <b>${pct(resVar(S.alpha) / TOT3)}</b> on top of PC1’s ${pct(PVE3[0])}.`}</div>
-      <div class="row"><button class="btn ${S.near2 ? 'primary glow' : ''}" data-act="lock2" ${S.busy ? 'disabled' : ''}>Lock in this screen</button><button class="btn ghost sm" data-act="sweep2" ${S.busy ? 'disabled' : ''}>Sweep all angles</button><button class="btn ghost sm" data-act="snap2" ${S.busy ? 'disabled' : ''}>Show me PC2</button></div>`;
-    if (S.pc3 == null) return `<h3>PC2 found</h3><p class="found">✓ ${S.lock2 != null && S.lock2 < PVE3[1] - .002 ? `Your screen added ${pct(S.lock2)}; PC2 adds ${pct(PVE3[1])}, so we turned it onto PC2.` : `PC1 ${pct(PVE3[0])} + PC2 ${pct(PVE3[1])} = ${pct(PVE3[0] + PVE3[1])}`}</p>
+      <div class="callout ${S.near2 ? 'win' : ''}">${S.near2 ? `<b>That’s the widest!</b> PC2 adds ${pct(resVar(BETA) / TOT3)}. Lock it in.` : `This screen adds <b>${pct(resVar(S.alpha) / TOT3)}</b> on top of PC1’s ${pct(V1 / TOT3)}.`}</div>
+      <div class="row"><button class="btn primary" data-act="lock2" ${S.busy ? 'disabled' : ''}>Lock in this screen</button><button class="btn ghost sm" data-act="sweep2" ${S.busy ? 'disabled' : ''}>Sweep all angles</button><button class="btn ghost sm" data-act="snap2" ${S.busy ? 'disabled' : ''}>Show me PC2</button></div>`;
+    const v1 = V1 / TOT3, v2 = resVar(S.alpha) / TOT3, b2 = resVar(BETA) / TOT3;
+    if (S.pc3 == null) return `<h3>${S.own2 ? 'Your PC2 is locked in' : 'PC2 found'}</h3><p class="found">✓ ${S.own2 ? `Your screen adds ${pct(v2)}. The best screen here (dashed) adds ${pct(b2)}.` : `PC1 ${pct(v1)} + PC2 ${pct(v2)} = ${pct(v1 + v2)}`}</p>
       <p>As in step 2, only <b>one</b> direction is left: at right angles to both PC1 and PC2. No choice to make.</p>
-      <div class="row"><button class="btn primary" data-act="pc3">Add PC3</button></div>`;
-    return `<h3>PC3 catches the rest</h3><p class="found">${pct(PVE3[0])} + ${pct(PVE3[1])} + ${pct(PVE3[2])} = 100%</p>
+      <div class="row"><button class="btn primary" data-act="pc3">Add PC3</button>${S.own2 ? '<button class="btn ghost sm" data-act="best2">Turn to the best PC2</button>' : ''}</div>`;
+    return `<h3>PC3 catches the rest</h3><p class="found">${pct(v1)} + ${pct(v2)} + ${pct(1 - v1 - v2)} = 100%</p>
       <p>On PC3’s screen the shadows bunch up near the centre: the cloud is a flat <b>pancake</b>, and PC3 is its thickness.</p>
       <div class="lbl">Light up</div>
       <div class="toggle"><button class="${S.light3 === 'pc2' ? 'on' : ''}" data-act="light3" data-v="pc2">PC2’s suns</button><button class="${S.light3 === 'pc3' ? 'on' : ''}" data-act="light3" data-v="pc3">PC3’s suns</button></div>
@@ -982,7 +1080,7 @@ function threeCtrl() {
   }
   const v = S.view ? VIEWS[S.view] : null;
   return `<h3>Which wall shows the most?</h3>
-    <p>A screen is a wall: whatever points straight at you is lost. Try each view:</p>
+    <p>A screen is a wall: whatever points straight at you is lost. Try each view${S.pc1v || S.own2 ? ' (these use R’s PC1, PC2 and PC3)' : ''}:</p>
     <div class="views">${Object.entries(VIEWS).map(([k, o]) => `<button class="vcard ${S.view === k ? 'on' : ''}" data-act="view" data-v="${k}"><b>${o.name}</b><span>${pct(1 - var3(Q.mat(o.q())[2]) / TOT3)} kept</span></button>`).join('')}</div>
     ${v ? `<div class="callout">${v.why}</div>` : '<p class="note">Or drag to orbit freely.</p>'}
     <div class="row"><button class="btn primary" data-act="go-all">All 16 columns →</button></div>`;
@@ -994,25 +1092,34 @@ $('#ctrl').addEventListener('click', async e => {
   else if (a === 'sweep' && !S.busy) await sweep(1);
   else if (a === 'snap' && !S.busy) { await turnAnim(1, TH_STAR); }
   else if (a === 'lock1s' && !S.busy) await lockIn(1);
-  else if (a === 'unfind') { S.found = false; S.near = false; S.lockKept = null; S.pc2 = null; S.light = 'pc1'; S.seen.fill(0); S.th = TH_STAR + 1.1; Sound.ui(); renderCtrl(); renderTable(); }
+  else if (a === 'best1' && !S.busy) await useBest(1);
+  else if (a === 'best2' && !S.busy) await useBest(2);
+  else if (a === 'unfind') { S.found = false; S.near = false; S.own1 = false; S.lockKept = null; S.pc2 = null; S.light = 'pc1'; S.seen.fill(0); S.th = TH_STAR + 1.1; Sound.ui(); renderCtrl(); renderTable(); }
   else if (a === 'pc2') { S.pc2T0 = performance.now(); S.pc2 = 0; S.light = 'pc2'; Sound.add(); renderCtrl(); renderTable(); }
   else if (a === 'light') { S.light = b.dataset.v; Sound.select(); renderCtrl(); }
   else if (a === 'go-three') { S.q = camLook([0, 0, 1], [1, 0, 0]); S.idle = true; setStage('three'); }
   else if (a === 'show1') { animQ(camLook(PCV(2), PCV(0)), 1600); Sound.select(); }
   else if (a === 'lock1') {
-    const [r] = camRows(); S.lock1 = var3(r) / TOT3; S.p3 = 'look1'; Sound.select();
-    animQ(camLook(PCV(2), PCV(0)), 1400, () => Sound.complete()); renderCtrl();
+    const [r] = camRows(); S.lock1 = var3(r) / TOT3; S.p3 = 'look1';
+    const exact = S.lock1 > PVE3[0] - .004;   // a hair off the best: settle exactly on R's PC1
+    setPC1(exact ? null : r); S.idle = false; S.qAnim = null;
+    if (exact) { animQ(camLook(PCV(2), PCV(0)), 1000); Sound.verdict(true); } else Sound.select();
+    renderCtrl();
   }
+  else if (a === 'best3') { setPC1(null); animQ(camLook(PCV(2), PCV(0)), 1200, () => Sound.complete()); Sound.select(); renderCtrl(); }
   else if (a === 'look1') {
     S.p3 = 'looking'; Sound.riser(1.4); renderCtrl();
-    animQ(camLook(PCV(0), PCV(2)), 1600, () => { S.p3 = 'pick2'; S.alpha = 25 / DEG; renderCtrl(); });
+    animQ(camLook(pc1Dir(), PCV(2)), 1800, () => { S.p3 = 'pick2'; S.alpha = 25 / DEG; S.found2 = false; S.near2 = false; S.own2 = false; S.seen2.fill(0); S.p2T0 = performance.now(); renderCtrl(); });
   }
   else if (a === 'sweep2' && !S.busy) await sweep(2);
   else if (a === 'snap2' && !S.busy) await turnAnim(2, BETA);
   else if (a === 'lock2' && !S.busy) await lockIn(2);
   else if (a === 'pc3') { S.pc3T0 = performance.now(); S.pc3 = 0; S.light3 = 'pc3'; Sound.add(); renderCtrl(); }
   else if (a === 'light3') { S.light3 = b.dataset.v; Sound.select(); renderCtrl(); }
-  else if (a === 'views') { S.p3 = 'done'; S.view = 'best'; S.q = camLook(PCV(0), PCV(2)); animQ(VIEWS.best.q(), 1500); Sound.verdict(true); renderCtrl(); }
+  else if (a === 'views') {
+    S.p3 = 'leaving'; S.outT0 = performance.now(); Sound.riser(1.1); renderCtrl();
+    setTimeout(() => { S.p3 = 'done'; S.view = 'best'; S.q = camLook(pc1Dir(), PCV(2)); animQ(VIEWS.best.q(), 1600); Sound.verdict(true); renderCtrl(); }, 1150);
+  }
   else if (a === 'view') { S.view = b.dataset.v; Sound.select(); animQ(VIEWS[S.view].q(), 1400); renderCtrl(); }
   else if (a === 'go-all') setStage('all');
   else if (a === 'keep') { S.keep = clamp(S.keep + +b.dataset.d, 1, 16); Sound.tick(S.keep); drawScree(); renderCtrl(); }

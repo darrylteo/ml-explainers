@@ -90,5 +90,34 @@ for (const [id, X, R, sg] of [
   check('E1 eigenvalues', maxDiff(ev, want) < 1e-9, `eigen(cov) ${ev} vs R ${want}`);
 }
 
+// E2: the spread matrix A on the eigenvector page (and its box areas, 9 × A) is R's cov(); E3: lambda1's share is R's PVE
+{
+  const pr = U.prcomp(P.hand.map(r => Z[r - 1]).map(r => [r[col('EDUCReal')], r[col('WWDRKReal')]]), P.rSigns.hand);
+  check('E2 cov(hand)', maxDiff(pr.cov, ref.cov_hand) < 1e-12, `A ${pr.cov} vs R ${ref.cov_hand}`);
+  const l = U.eigenSym(pr.cov).values, s2 = ref.pca_hand.sdev.map(s => s * s);
+  check('E3 share', Math.abs(l[0] / (l[0] + l[1]) - s2[0] / (s2[0] + s2[1])) < 1e-12, 'lambda1 share differs from R');
+}
+// P4: PCA step 3 with the learner's own PC1 (same recipe as setPC1 on the page): look down u, then the best
+// screen in what is left. For R's PC1 it must give R's PC2; for any other u, R's top eigenvalue of the leftover.
+{
+  const T3 = Z.map(r => [r[col('EDUCReal')], r[col('WWDRKReal')], r[col('HOUSReal')]]), N = T3.length;
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], nrm = a => { const l = Math.hypot(...a); return a.map(v => v / l); };
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const pr = U.prcomp(T3, P.rSigns.tri), PCV = k => pr.rotation.map(r => r[k]);
+  const best2 = f => {
+    f = nrm(f); const p3 = PCV(2), e1 = nrm(p3.map((x, i) => x - dot(p3, f) * f[i])), e2 = cross(f, e1);
+    const RES = T3.map(p => [dot(p, e1), dot(p, e2)]);
+    let a = 0, b = 0, c = 0; RES.forEach(([x, y]) => { a += x * x; b += y * y; c += x * y; });
+    const h = .5 * Math.atan2(2 * c, a - b), v = RES.reduce((s, [x, y]) => s + (Math.cos(h) * x + Math.sin(h) * y) ** 2, 0) / (N - 1);
+    return { v, dir: e1.map((x, i) => Math.cos(h) * x + Math.sin(h) * e2[i]), var1: T3.reduce((s, p) => s + dot(p, f) ** 2, 0) / (N - 1) };
+  };
+  const t = best2(PCV(0));
+  check('P4 PC2 variance', Math.abs(t.v - ref.pca_tri.sdev[1] ** 2) < 1e-9, `${t.v} vs R ${ref.pca_tri.sdev[1] ** 2}`);
+  check('P4 PC2 direction', Math.abs(Math.abs(dot(t.dir, PCV(1))) - 1) < 1e-9, 'best screen after PC1 is not PC2');
+  const o = best2(ref.own_u);
+  check('P4 own PC1 variance', Math.abs(o.var1 - ref.own_u_var) < 1e-9, `${o.var1} vs R ${ref.own_u_var}`);
+  check('P4 own PC2 variance', Math.abs(o.v - ref.own_u_best2) < 1e-9, `${o.v} vs R ${ref.own_u_best2}`);
+}
+
 console.log(`${passes} passed, ${fails} failed (reference: ${ref.r_version})`);
 process.exit(fails ? 1 : 0);
