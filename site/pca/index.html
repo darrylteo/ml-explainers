@@ -625,10 +625,10 @@ function draw3(t) {
 }
 function animQ(to, dur = 1500, done) { S.qAnim = { from: S.q.slice(), to, t0: performance.now(), dur, done }; S.idle = false; }
 const VIEWS = {
-  best:   { name: 'Best wall', q: () => camLook(PCV(2), PCV(0)), why: `You look along PC3, so the wall shows PC1 and PC2. Only PC3’s ${pct(PVE3[2])} hides in depth: this is the flattest side of the pancake, the view the map in step 5 uses.` },
+  best:   { name: 'Best wall', q: () => camLook(PCV(2), PCV(0)), why: `You look along PC3, so the wall shows PC1 and PC2. Only PC3’s ${pct(PVE3[2])} hides in depth: this is the flattest side of the pancake. The map in step 5 does the same with 16 columns.` },
   along1: { name: 'Along PC1', q: () => camLook(PCV(0), PCV(2)), why: `The biggest spread points straight at you, so the cloud looks thin and crowded. The wall shows only PC2 and PC3: ${pct(PVE3[1] + PVE3[2])}. The worst possible view.` },
   along2: { name: 'Along PC2', q: () => camLook(PCV(1), PCV(0)), why: `PC2 points at you, so you lose its ${pct(PVE3[1])}. You still see the long PC1 spread, so the cloud looks wide but too thin.` },
-  orig:   { name: 'EDUC × WWDRK', q: () => camLook([0, 0, 1], [1, 0, 0]), why: `The step 2 view: HOUS points at you. Two original columns already show ${pct(1 - var3([0, 0, 1]) / TOT3)}, because EDUC, WWDRK and HOUS rise and fall together.` },
+  orig:   { name: 'EDUC × WWDRK', q: () => camLook([0, 0, 1], [1, 0, 0]), why: `The step 2 view: HOUS points at you. After scaling, each column holds exactly a third of the spread, so dropping any one column keeps ${pct(1 - var3([0, 0, 1]) / TOT3)}, whatever the data. The best wall beats it by mixing all three columns.` },
 };
 
 /* ================= step 4: all 16 ================= */
@@ -664,6 +664,7 @@ $('#screeSvg').addEventListener('click', e => { const g = e.target.closest('[dat
 
 /* ================= step 5: the map as a landscape, and a guessing game ================= */
 let BV = null;
+const TERRAIN = { key: '', cv: null };
 function groupsBy() { return S.colour === 'hcl' ? HCL : S.colour === 'km' ? P.kmeans4 : null; }
 const ARROWLEN = P.cols.map((_, j) => Math.hypot(PF.rotation[j][0], PF.rotation[j][1]));
 // what the map "thinks" column j is at a point: the height of that column's landscape (PCA's 2-PC reconstruction)
@@ -681,11 +682,18 @@ function drawMap(t) {
   const j = S.mode === 'land' ? (S.hoverVar >= 0 ? S.hoverVar : S.colJ) : -1;
   // the landscape: a tilted sheet whose height is what the map predicts for column j
   if (j >= 0 && uf > .2) {
-    const cell = 14;
-    for (let py = 0; py < H; py += cell) for (let px = 0; px < W; px += cell) {
-      const v = height(j, IX(px + cell / 2), IY(py + cell / 2)), [r, g, b, a] = heat(v);
-      ctx.fillStyle = `rgba(${r},${g},${b},${(.06 + .3 * a) * uf})`; ctx.fillRect(px, py, cell + .5, cell + .5);
+    // painted once per column and size into an offscreen canvas, then copied each frame (cheap)
+    const key = `${j}|${W}|${H}|${DPR}`;
+    if (uf >= 1 && TERRAIN.key !== key) {
+      const oc = TERRAIN.cv || (TERRAIN.cv = document.createElement('canvas')), o = oc.getContext('2d'), cell = 14;
+      oc.width = Math.round(W * DPR); oc.height = Math.round(H * DPR); o.setTransform(DPR, 0, 0, DPR, 0, 0);
+      for (let py = 0; py < H; py += cell) for (let px = 0; px < W; px += cell) {
+        const [r, g, b, a] = heat(height(j, IX(px + cell / 2), IY(py + cell / 2)));
+        o.fillStyle = `rgba(${r},${g},${b},${.06 + .3 * a})`; o.fillRect(px, py, cell + .5, cell + .5);
+      }
+      TERRAIN.key = key;
     }
+    if (TERRAIN.key === key) ctx.drawImage(TERRAIN.cv, 0, 0, W, H);
     // contour lines every half standard deviation, labelled
     const lx = PF.rotation[j][0], ly = PF.rotation[j][1], l2 = lx * lx + ly * ly;
     if (l2 > 1e-4) for (let lev = -3; lev <= 3; lev += .5) {
@@ -894,7 +902,7 @@ function renderCtrl() {
         <div class="row"><button class="btn ${S.near ? 'primary glow' : ''}" data-act="lock1s" ${S.busy ? 'disabled' : ''}>Lock in this screen</button><button class="btn ghost sm" data-act="sweep" ${S.busy ? 'disabled' : ''}>Sweep all angles</button><button class="btn ghost sm" data-act="snap" ${S.busy ? 'disabled' : ''}>Show me PC1</button></div>`;
     } else if (S.pc2 == null) {
       const best = spinVar(TH_STAR) / TOT2;
-      h += `<h3>You found PC1</h3><p class="found">✓ ${S.lockKept != null && S.lockKept < best - .001 ? `Your screen kept ${pct(S.lockKept)}; PC1 keeps ${pct(best)}, so we turned it the last bit.` : `This screen keeps ${pct(best)}: no angle keeps more.`}</p>
+      h += `<h3>You found PC1</h3><p class="found">✓ ${S.lockKept != null && S.lockKept < best - .001 ? `Your screen kept ${pct(S.lockKept)}; PC1 keeps ${pct(best)}, so we turned it onto PC1.` : `This screen keeps ${pct(best)}: no angle keeps more.`}</p>
         <p>That direction is <b>PC1</b>. Each planet’s shadow on it is its <b>PC1 score</b> (new column in the table).</p>
         <p>The pink part of each bar is what PC1 missed. In 2-D only <b>one</b> direction is at right angles to PC1, so there is nothing left to choose.</p>
         <div class="row"><button class="btn primary" data-act="pc2">Add PC2</button><button class="btn ghost sm" data-act="unfind">Spin again</button></div>
@@ -925,7 +933,7 @@ function renderCtrl() {
         <p>Pick a column. The map turns into a landscape of it: <b style="color:#ff9ec4">pink</b> where the map expects it high, <b style="color:#a9c2ff">blue</b> where low. Its arrow points <b>uphill</b>.</p>
         <div class="cols">${P.cols.map((_, c) => ({ c, v: SHOWN[c] })).sort((a, b) => b.v - a.v).map(({ c, v }) => `<button class="${c === j ? 'on' : ''}" data-act="col" data-v="${c}">${SHORT[c]}<i>${Math.round(v * 100)}%</i></button>`).join('')}</div>
         <div class="callout">${sh > .55 ? `A steep hill: the map shows <b>${pct(sh)}</b> of how ${SHORT[j]} differs between cities. Hover a city: its real value and the map’s guess are close.` : sh > .25 ? `A gentle slope: the map shows <b>${pct(sh)}</b> of ${SHORT[j]}. Hover cities: the map’s guesses are only roughly right.` : `Almost flat: the map shows only <b>${pct(sh)}</b> of ${SHORT[j]}. Its short arrow is a warning: this map cannot tell you much about ${WORDS[SHORT[j]]}.`}</div>
-        <p class="note">The % on each column is how much of it the 2-D map can show. Long arrows = steep hills. Columns whose arrows point the same way (EDUC, WWDRK, HOUS) rise together.</p>`;
+        <p class="note">The % on each column is how much of it the 2-D map can show. Long arrows = steep hills. Columns whose arrows point the same way (EDUC, WWDRK, HOUS) tend to be high in the same cities.</p>`;
     } else {
       const G = S.game;
       h += `<h3>Where is this city?</h3>`;
@@ -954,7 +962,7 @@ function threeCtrl() {
       <div class="callout ${S.near1 ? 'win' : ''}">${S.near1 ? `<b>That’s the widest!</b> ${pct(v)} of the spread. Lock it in.` : `This line keeps <b>${pct(v)}</b> of the spread.`}</div>
       <div class="row"><button class="btn ${S.near1 ? 'primary glow' : 'primary'}" data-act="lock1">Lock in this line</button><button class="btn ghost sm" data-act="show1">Show me PC1</button></div>`;
   }
-  if (S.p3 === 'look1') return `<h3>PC1 is locked</h3><p class="found">${S.lock1 > PVE3[0] - .004 ? `Spot on: ${pct(PVE3[0])}.` : `Your line kept ${pct(S.lock1)}; PC1 keeps ${pct(PVE3[0])}, so we turned it the last bit.`}</p>
+  if (S.p3 === 'look1') return `<h3>PC1 is locked</h3><p class="found">${S.lock1 > PVE3[0] - .004 ? `Spot on: ${pct(PVE3[0])}.` : `Your line kept ${pct(S.lock1)}; PC1 keeps ${pct(PVE3[0])}, so we turned it onto PC1.`}</p>
       <p>Now <b>look straight down PC1</b>. Everything PC1 explains collapses into a point, and the cities become a flat picture of what is left: exactly the 2-D game from step 2.</p>
       <div class="row"><button class="btn primary" data-act="look1">Look along PC1</button></div>`;
   if (S.p3 === 'looking') return `<h3>Turning to look down PC1…</h3>`;
@@ -963,7 +971,7 @@ function threeCtrl() {
       <p>PC1 points straight at you. The planets show what PC1 could not catch. Same game as step 2: <b>drag to turn the screen</b>.</p>
       <div class="callout ${S.near2 ? 'win' : ''}">${S.near2 ? `<b>That’s the widest!</b> PC2 adds ${pct(PVE3[1])}. Lock it in.` : `This screen adds <b>${pct(resVar(S.alpha) / TOT3)}</b> on top of PC1’s ${pct(PVE3[0])}.`}</div>
       <div class="row"><button class="btn ${S.near2 ? 'primary glow' : ''}" data-act="lock2" ${S.busy ? 'disabled' : ''}>Lock in this screen</button><button class="btn ghost sm" data-act="sweep2" ${S.busy ? 'disabled' : ''}>Sweep all angles</button><button class="btn ghost sm" data-act="snap2" ${S.busy ? 'disabled' : ''}>Show me PC2</button></div>`;
-    if (S.pc3 == null) return `<h3>PC2 found</h3><p class="found">✓ ${S.lock2 != null && S.lock2 < PVE3[1] - .002 ? `Your screen added ${pct(S.lock2)}; PC2 adds ${pct(PVE3[1])}, so we turned it the last bit.` : `PC1 ${pct(PVE3[0])} + PC2 ${pct(PVE3[1])} = ${pct(PVE3[0] + PVE3[1])}`}</p>
+    if (S.pc3 == null) return `<h3>PC2 found</h3><p class="found">✓ ${S.lock2 != null && S.lock2 < PVE3[1] - .002 ? `Your screen added ${pct(S.lock2)}; PC2 adds ${pct(PVE3[1])}, so we turned it onto PC2.` : `PC1 ${pct(PVE3[0])} + PC2 ${pct(PVE3[1])} = ${pct(PVE3[0] + PVE3[1])}`}</p>
       <p>As in step 2, only <b>one</b> direction is left: at right angles to both PC1 and PC2. No choice to make.</p>
       <div class="row"><button class="btn primary" data-act="pc3">Add PC3</button></div>`;
     return `<h3>PC3 catches the rest</h3><p class="found">${pct(PVE3[0])} + ${pct(PVE3[1])} + ${pct(PVE3[2])} = 100%</p>

@@ -431,14 +431,14 @@ function renderCtrl() {
     h = kick('Step 2a · Meet A') + `<h3>A is the shape of the cloud</h3>
       <p>A is the <b>spread matrix</b> (covariance matrix) of the 10 cities. Its four numbers sum up the shape of the cloud of planets:</p>
       <div class="toggle">${Object.entries(ENTRY).map(([k, o]) => `<button class="${S.entry === k ? 'on' : ''}" data-act="entry" data-v="${k}">${o.name}</button>`).join('')}</div>
-      <div class="callout"><b>${E.name} = ${A[E.i][E.j].toFixed(2)}</b>. For each city, take ${E.what}. That is one box on the stage. Average the 10 boxes (divide by n − 1 = 9).</div>
+      <div class="callout"><b>${E.name} = ${A[E.i][E.j].toFixed(2)}</b>. For each city, take ${E.what}. That is one box on the stage. Add up the 10 boxes and divide by 9 (one less than the number of cities, as R’s cov() does).</div>
       ${S.entry === 'a12' ? `<p>It is <b>positive</b>: cities with more schooling tend to have more white-collar jobs too, so the cloud leans up and to the right. A negative value would lean it the other way; zero would mean no lean.</p>` : `<p>${S.entry === 'a11' ? 'EDUC’s boxes are big, so the cloud is wide left to right.' : 'WWDRK’s boxes are smaller, so the cloud is thinner up and down.'}</p>`}
       <p class="note">The two "move together" corners are the same number, so A is <b>symmetric</b>. That will matter in step 3.</p>
       <div class="row"><button class="btn primary" data-act="sub" data-v="move">What does A do to an arrow? →</button></div>`;
   }
   else if (st === 'stretch') h = kick('Step 2b · A moves arrows') + `<h3>Multiplying by A turns and stretches</h3>
       <p>To multiply an arrow v = (v₁, v₂) by A, take v₁ of A’s first column plus v₂ of its second column. The white arrow (1, 0) lands on the first column: (${A[0][0].toFixed(2)}, ${A[1][0].toFixed(2)}).</p>
-      <p>Press the button to send all 24 arrows through A. The circle becomes an ellipse <b>shaped like the cloud</b>: A pulls every arrow towards the direction the cities spread.</p>
+      <p>Press the button to send all 24 arrows through A. The circle becomes an ellipse that <b>points the same way as the cloud</b> (and is even more stretched): A pulls every arrow towards the direction the cities spread.</p>
       <div class="row"><button class="btn ${S.morphTo ? 'ghost' : 'primary'}" data-act="morph">${S.morphTo ? 'Undo A' : 'Apply A'}</button><button class="btn ghost sm" data-act="sub" data-v="meet">← Back to the cloud</button></div>
       <p class="note" style="margin-top:12px">Look closely: most arrows change direction, but along the ellipse’s longest and shortest axes they don’t. Those are the arrows we want.</p>
       <div class="row"><button class="btn primary" data-act="go" data-v="find">Find them →</button></div>`;
@@ -464,7 +464,7 @@ function renderCtrl() {
       <p>Start with any arrow. Multiply by A, then shrink back to length 1. Each push stretches the PC1 part ${(LAM[0] / LAM[1]).toFixed(1)}× more than the PC2 part, so PC1 quickly takes over.</p>
       ${S.hist.length ? `<div class="lbl">Degrees away from PC1 after each push</div><div class="hist">${S.hist.map(d => `<span class="${d < 1 ? 'ok' : ''}">${d < 1 ? d.toFixed(2) : d.toFixed(1)}°</span>`).join('')}</div>` : ''}
       <div class="row"><button class="btn primary" data-act="push" ${S.push ? 'disabled' : ''}>Push once (A·v)</button><button class="btn ghost sm" data-act="new">Start somewhere new</button></div>
-      <p class="note" style="margin-top:12px">This is the <b>power method</b>, the simplest way software finds the top eigenvector. Real PCA code uses faster cousins of it.</p>
+      <p class="note" style="margin-top:12px">This is the <b>power method</b>, the simplest way to find the top eigenvector. R’s prcomp uses a cleverer method (the singular value decomposition), but the power method shows why the biggest eigenvalue wins.</p>
       <div class="row"><a class="btn ghost sm" href="../pca/#spin">← Back to the planets</a><a class="btn ghost sm" href="../">All explainers</a></div>`;
   }
   $('#ctrl').innerHTML = h;

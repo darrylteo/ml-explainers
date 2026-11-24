@@ -859,7 +859,7 @@ function renderCtrl() {
     else {
       const g = U.cutree(T_RAW, S.k);
       const bands = range(S.k).map(k => { const v = range(N).filter(i => g[i] === k + 1).map(i => P.rows[i][iD]); return { c: k, lo: Math.min(...v), hi: Math.max(...v) }; }).sort((a, b) => a.lo - b.lo);
-      h += `<p>DENS is in thousands; every other column is in tens or hundreds. Squared distance is a sum over columns, so the column with the biggest spread controls it:</p>
+      h += `<p>DENS runs from 1,441 to 9,699 people per square mile. The next widest columns, the pollution potentials and MORT, span a few hundred, and household size barely moves (2.9 to 3.5). Squared distance is a sum over columns, so the column with the biggest spread controls it:</p>
         <div class="lbl">Share of the squared distance, raw data</div>
         <div class="bars">${VARSHARE_RAW.map((v, j) => [v, j]).sort((a, b) => b[0] - a[0]).slice(0, 4).map(([v, j]) => `<div class="bar"><span>${SHORT[j]}</span><div><i style="width:${(v * 100).toFixed(1)}%;background:${j === iD ? '#ff6fa8' : '#6ee7ff'}"></i></div><b>${(v * 100).toFixed(1)}%</b></div>`).join('')}</div>
         <p>So the ${S.k} raw clusters are just ${S.k} bands of density, with no overlap:</p>
