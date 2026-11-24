@@ -171,7 +171,7 @@ a.btn{text-decoration:none;display:inline-block}
           <div class="icard"><div class="num">2</div><h3>Find the best angle</h3><p>Photograph a cup from above and it looks like a circle; from the side you see the handle. Some angles show more.</p></div>
           <div class="icard"><div class="num">3</div><h3>Shadows that spread</h3><p>PCA turns a screen until the cities’ shadows on it spread out as much as possible. That direction is PC1.</p></div>
         </div>
-        <details class="curious">
+        <details class="curious" open>
           <summary>For the curious: the maths behind the pictures</summary>
           <div class="mathgrid">
             <div class="mcard"><div class="mlab">Where a city’s shadow lands on the screen</div><div data-tex="\tip{zi}{z_i} = \tip{phi1}{\phi_1}\,\tip{xi1}{x_{i1}} + \tip{phi2}{\phi_2}\,\tip{xi2}{x_{i2}}, \qquad \tip{phi1}{\phi_1}^2 + \tip{phi2}{\phi_2}^2 = 1" data-plain="z_i = φ₁·x_i1 + φ₂·x_i2, with φ₁² + φ₂² = 1"></div></div>
@@ -239,6 +239,7 @@ const HAND = P.hand.map(r => r - 1);
 const PH = U.prcomp(HAND.map(i => [Z[i][iE], Z[i][iW]]), P.rSigns.hand);
 const HC = HAND.map(i => [Z[i][iE] - PH.center[0], Z[i][iW] - PH.center[1]]);   // centred, as prcomp sees them
 const TOT2 = PH.sdev.reduce((s, v) => s + v * v, 0);
+const TAGS = [];   // where the triangle's d, z, r letters sit, so the planet labels keep clear of them
 const FAR = HC.reduce((b, p, k) => Math.hypot(...p) > Math.hypot(...HC[b]) ? k : b, 0);   // the planet the triangle starts on
 const lineAng = v => ((Math.atan2(v[1], v[0]) % Math.PI) + Math.PI) % Math.PI;
 const TH_STAR = lineAng([PH.rotation[0][0], PH.rotation[1][0]]);
@@ -598,13 +599,27 @@ function drawScene(t, sc) {
     const ux = Math.sign(z || 1) * c, uy = -Math.sign(z || 1) * s, vx = (px - fx) / (Math.hypot(px - fx, py - fy) || 1), vy = (py - fy) / (Math.hypot(px - fx, py - fy) || 1), q = 8;
     ctx.lineWidth = 1.2; ctx.setLineDash([]); ctx.strokeStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(fx - ux * q, fy - uy * q); ctx.lineTo(fx - ux * q + vx * q, fy - uy * q + vy * q); ctx.lineTo(fx + vx * q, fy + vy * q); ctx.stroke();
     ctx.globalAlpha = .9; ctx.font = '700 13px JetBrains Mono, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const tag = (t, x1, y1, x2, y2, col, off) => { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, l = Math.hypot(x2 - x1, y2 - y1) || 1; ctx.fillStyle = col; ctx.fillText(t, mx - (y2 - y1) / l * off, my + (x2 - x1) / l * off); };
-    tag('z', ox, oy, fx, fy, zc, r > 0 ? 12 : -12); tag('r', fx, fy, px, py, '#ff9ec4', z > 0 ? -12 : 12); tag('d', ox, oy, px, py, '#ffffff', r > 0 ? -12 : 12);
+    // each letter tries spots beside its side of the triangle (outside first, then inside, then further along it) and
+    // takes the first that is clear of every planet and of the letters already placed; a side too short to read is left unlabelled
+    const gx = (ox + fx + px) / 3, gy = (oy + fy + py) / 3, planets = sc.pts.map(([a, b]) => [L.cx + a * L.s, L.cy - b * L.s]), taken = [];
+    const tag = (t, x1, y1, x2, y2, col) => {
+      const l = Math.hypot(x2 - x1, y2 - y1); if (l < 22) return;
+      let nx = -(y2 - y1) / l, ny = (x2 - x1) / l; if (((x1 + x2) / 2 + nx - gx) * nx + ((y1 + y2) / 2 + ny - gy) * ny < 0) { nx = -nx; ny = -ny; }   // outward
+      for (const f of [.5, .35, .65, .2, .8]) for (const off of [13, -13, 24, -24]) {
+        const tx = lerp(x1, x2, f) + nx * off, ty = lerp(y1, y2, f) + ny * off;
+        if (planets.some(([a, b]) => Math.hypot(a - tx, b - ty) < sc.R + 9) || taken.some(([a, b]) => Math.hypot(a - tx, b - ty) < 18)) continue;
+        taken.push([tx, ty]); TAGS.push({ x: tx - 8, y: ty - 9, w: 16, h: 18 });
+        ctx.fillStyle = 'rgba(4,6,16,.75)'; ctx.beginPath(); ctx.arc(tx, ty, 8.5, 0, TAU); ctx.fill();
+        ctx.fillStyle = col; ctx.fillText(t, tx, ty + .5); return;
+      }
+    };
+    TAGS.length = 0;
+    tag('z', ox, oy, fx, fy, zc); tag('r', fx, fy, px, py, '#ff9ec4'); tag('d', ox, oy, px, py, '#ffffff');
     ctx.restore();
     label(`#${sc.ids[kk] + 1}: d² ${(x * x + y * y).toFixed(2)} = z² ${(z * z).toFixed(2)} + r² ${(r * r).toFixed(2)}`, W - 12, 92, '#c9d0f5', 'right');
-  } else sc.triK = -1;
+  } else { sc.triK = -1; TAGS.length = 0; }
   if (sc.centre) { FX.glow(ctx, L.cx, L.cy, 40, C1, .9); label(sc.centre, L.cx + 14, L.cy + 18, C1); }
-  if (sc.ids) placeLabels(sc.pts.map(([x, y], k) => ({ x: L.cx + x * L.s, y: L.cy - y * L.s, t: '#' + (sc.ids[k] + 1), on: S.hover === sc.ids[k] })), [{ x: 0, y: 0, w: 320, h: 84 }]);
+  if (sc.ids) placeLabels(sc.pts.map(([x, y], k) => ({ x: L.cx + x * L.s, y: L.cy - y * L.s, t: '#' + (sc.ids[k] + 1), on: S.hover === sc.ids[k] })), [{ x: 0, y: 0, w: 320, h: 84 }, ...(sc.triK >= 0 ? TAGS : [])]);
   ctx.restore();
   sc.meter(p2);
   if (!sc.found) label(sc.near ? 'widest! lock it in' : `screen at ${((th * DEG) % 180).toFixed(0)}°`, W - 12, 22, sc.near ? C1 : '#c9d0f5', 'right');
