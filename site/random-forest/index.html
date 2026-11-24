@@ -235,7 +235,7 @@ a.btn{text-decoration:none;display:inline-block}
           <div class="mcard"><div class="mlab">Gini impurity of a node</div><div data-tex="\tip{G}{G} = 1 - \sum_{\tip{k}{k}} \tip{pk}{p_k^{2}}" data-plain="G = 1 − Σ_k p_k²"></div></div>
           <div class="mcard"><div class="mlab">Reduction in error from a split</div><div data-tex="\tip{dG}{\Delta G} = \tip{Gp}{G_{\text{parent}}} - \frac{\tip{nL}{n_L}}{\tip{n}{n}}\,\tip{GL}{G_L} - \frac{\tip{nR}{n_R}}{\tip{n}{n}}\,\tip{GR}{G_R}" data-plain="ΔG = G_parent − (n_L/n)·G_L − (n_R/n)·G_R"></div></div>
           <div class="mcard"><div class="mlab">Features offered at each split</div><div data-tex="\tip{mtry}{m_{\text{try}}} = \lfloor \sqrt{\tip{p}{p}} \rfloor = \lfloor \sqrt{5} \rfloor = 2" data-plain="m_try = ⌊√p⌋ = ⌊√5⌋ = 2"></div></div>
-          <div class="mcard"><div class="mlab">Forest prediction for a new row</div><div data-tex="\tip{yhat}{\hat{y}} = \tip{mode}{\operatorname{mode}}\big\{\, \tip{hb}{h_1(\tip{x}{x})},\ \tip{hb}{h_2(\tip{x}{x})},\ \dots,\ \tip{hb}{h_{\tip{B}{B}}(\tip{x}{x})} \,\big\}" data-plain="ŷ = mode{ h_1(x), …, h_B(x) }"></div></div>
+          <div class="mcard"><div class="mlab">Forest prediction for a new row</div><div data-tex="\tip{yhat}{\hat{y}} = \tip{mode}{\operatorname{mode}}\big\{\, \tip{h1}{h_1(\tip{x}{x})},\ \tip{h2}{h_2(\tip{x}{x})},\ \dots,\ \tip{hB}{h_{\tip{B}{B}}(\tip{x}{x})} \,\big\}" data-plain="ŷ = mode{ h_1(x), …, h_B(x) }"></div></div>
         </div>
         <p class="mhint"><b>Hover or tap any symbol</b> to see what it means.</p>
       </div>
@@ -307,9 +307,17 @@ a.btn{text-decoration:none;display:inline-block}
   "name": "Mode",
   "def": "The most common value. Every tree votes and the class with the most votes wins."
  },
- "hb": {
-  "name": "Tree vote h_b(x)",
-  "def": "The class of the leaf that row x lands in when dropped through tree b."
+ "h1": {
+  "name": "Tree 1’s vote h₁(x)",
+  "def": "The class of the leaf that row x lands in when dropped through Tree 1, the tree you built by hand."
+ },
+ "h2": {
+  "name": "Tree 2’s vote h₂(x)",
+  "def": "The class of the leaf that row x lands in when dropped through Tree 2, the first tree grown automatically."
+ },
+ "hB": {
+  "name": "Last tree’s vote h_B(x)",
+  "def": "The class of the leaf that row x lands in when dropped through the last tree, tree number B."
  },
  "x": {
   "name": "New row x",

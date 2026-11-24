@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hierarchical Clustering by Hand</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+
+/* header */
+.top{display:flex;align-items:center;gap:20px;padding:14px 20px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:22px;letter-spacing:-.02em}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.steps{display:flex;gap:6px;list-style:none;margin:0 0 0 auto;padding:0;flex-wrap:wrap;counter-reset:s}
+.steps li{font:600 12px var(--sans);padding:6px 11px;border-radius:99px;border:1px solid var(--line);color:var(--muted);display:flex;align-items:center;gap:6px}
+.steps li::before{content:counter(s);counter-increment:s;font:700 10px var(--mono);width:17px;height:17px;border-radius:50%;display:grid;place-items:center}
+.steps li.reach{cursor:pointer}
+.steps li.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.steps li.active::before{background:var(--accent);color:var(--on-accent)}
+.steps li.done{color:var(--ink)}
+.steps li.done::before{content:"✓";background:var(--pass)}
+
+/* layout */
+.layout{display:grid;grid-template-columns:minmax(330px,440px) minmax(0,1fr);grid-template-areas:"table stage" "ctrl stage" "code stage";grid-template-rows:auto auto 1fr;gap:14px;padding:0 20px 20px;align-items:start}
+.card{border-radius:16px;min-width:0}
+#tableCard{grid-area:table;padding:14px 14px 10px}
+#ctrl{grid-area:ctrl;padding:16px}
+#code{grid-area:code}
+.stage{grid-area:stage;position:sticky;top:14px;display:flex;flex-direction:column;height:calc(100vh - 96px);min-height:600px;overflow:hidden}
+@media (max-width:900px){
+  .top{padding:12px 16px}
+  .steps{margin-left:0}
+  .layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"table" "stage" "ctrl" "code";padding:0 16px 16px}
+  .stage{position:relative;top:0;height:78vh;min-height:520px}
+}
+.card-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.card-h h2{margin:0;font-size:15px}
+.muted{color:var(--muted)} .small{font-size:12px}
+
+/* table */
+.tbl-wrap{overflow:auto;max-height:340px}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12.5px}
+th{font:600 11.5px var(--sans);text-align:right;padding:4px 6px 6px;white-space:nowrap;vertical-align:bottom;position:sticky;top:0;background:#0c1028;z-index:1;border-bottom:1.5px solid var(--line-strong)}
+th small{display:block;font:400 10px var(--sans);color:var(--muted)}
+th:first-child,td.idx{text-align:left}
+td{padding:4px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;transition:background-color .2s}
+td.idx{color:var(--muted)}
+td.z{color:var(--accent)}
+tr.hl td{background:rgba(110,231,255,.12)}
+tr.hand td.idx{color:var(--ink)}
+tr.hand td.idx::after{content:"★";color:var(--accent);margin-left:4px;font-size:10px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;box-shadow:0 0 8px currentColor}
+.gpill{display:inline-flex;align-items:center;gap:5px;font:700 11px var(--mono)}
+
+/* control panel */
+.kicker{font:700 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+#ctrl h3{margin:0 0 6px;font-size:19px;letter-spacing:-.01em}
+#ctrl p{margin:0 0 12px;color:var(--muted);font-size:14.5px;line-height:1.5}
+#ctrl p b{color:var(--ink)}
+.btn{font:600 14px var(--sans);border:1px solid var(--line-strong);padding:9px 14px;border-radius:10px;cursor:pointer}
+.btn:hover:not(:disabled){transform:translateY(-1px)}
+.btn.ghost{background:transparent}
+.btn.sm{font-size:12.5px;padding:6px 10px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+a.btn{text-decoration:none;display:inline-block}
+.back{font:600 12px var(--sans);text-decoration:none}
+.back:hover{text-decoration:underline}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.calc{background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0 0 10px;font:500 12.5px/1.75 var(--mono);color:var(--muted);overflow-x:auto}
+.calc b{color:var(--ink)} .calc .acc{color:var(--accent);font-weight:700}
+.calc .big{font:700 20px var(--mono);color:var(--accent)}
+.verdict-ok{color:var(--pass);font:600 13.5px var(--sans)} .verdict-no{color:var(--fail);font:600 13.5px var(--sans)}
+.prog{display:flex;gap:4px;margin:4px 0 12px}
+.prog i{flex:1;height:6px;border-radius:9px;background:rgba(255,255,255,.07)}
+.prog i.on{background:linear-gradient(90deg,#4fd8ff,#a78bfa);box-shadow:0 0 8px rgba(110,200,255,.5)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px}
+.chip{font:600 12.5px var(--sans);padding:5px 11px;border-radius:99px;border:1px solid var(--line-strong);color:var(--muted);background:transparent;cursor:pointer}
+.chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.kbig{display:flex;align-items:center;gap:10px;margin:2px 0 12px}
+.kbig b{font:700 34px var(--mono);color:var(--accent);text-shadow:0 0 18px rgba(110,231,255,.5);min-width:2.2ch;text-align:center}
+.kbig span{color:var(--muted);font-size:13px}
+.sizes{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.sizes span{font:700 12px var(--mono);padding:3px 9px;border-radius:8px;border:1px solid currentColor;background:rgba(255,255,255,.03)}
+.lbl{font:700 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:4px 0 6px}
+.bars{display:grid;gap:5px;margin:0 0 12px}
+.bar{display:grid;grid-template-columns:70px 1fr 62px;gap:8px;align-items:center;font-size:12.5px}
+.bar>div{height:10px;background:rgba(255,255,255,.06);border-radius:9px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:9px;transition:width .5s}
+.bar b{font:600 12px var(--mono);text-align:right}
+.heat{display:grid;gap:2px;font:600 10.5px var(--mono);margin:0 0 12px;overflow-x:auto}
+.heat div{padding:3px 4px;text-align:center;border-radius:4px;white-space:nowrap}
+.heat .hn{text-align:right;color:var(--muted);font-weight:500;padding-right:6px}
+.note{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+.toggle{display:inline-flex;background:rgba(255,255,255,.04);border:1px solid var(--line-strong);border-radius:11px;padding:3px;gap:3px;margin:0 0 12px}
+.toggle button{font:600 13px var(--sans);border:0;background:none;color:var(--muted);padding:7px 12px;border-radius:8px;cursor:pointer}
+.toggle button.on{background:var(--accent-soft);color:var(--accent);box-shadow:0 0 14px rgba(110,231,255,.18)}
+
+/* stage */
+.stage-h{padding:14px 18px 10px;border-bottom:1px solid var(--line)}
+.stage-h h2{margin:0;font-size:17px;letter-spacing:-.01em}
+.stage-h p{margin:3px 0 0;font-size:13px;color:var(--muted)}
+.stage-b{position:relative;flex:1;min-height:0}
+#intro,#duo{position:absolute;inset:0;transition:opacity .5s}
+.hide{opacity:0;pointer-events:none}
+#intro{display:flex;flex-direction:column;justify-content:center;padding:24px;gap:16px;overflow:auto}
+.intro-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.icard{border:1px solid var(--line);border-radius:14px;padding:16px}
+.icard .num{font:700 13px var(--mono);width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);margin-bottom:10px}
+.icard h3{margin:0 0 6px;font-size:16px}
+.icard p{margin:0;font-size:13.5px;line-height:1.5;color:var(--muted)}
+#duo{display:grid;grid-template-rows:58% 42%;grid-template-columns:100%}
+#duo.side{grid-template-rows:100%;grid-template-columns:60% 40%}
+.pane{position:relative;min-width:0;min-height:0}
+.pane+.pane{border-top:1px solid var(--line)}
+#duo.side .pane+.pane{border-top:0;border-left:1px solid var(--line)}
+#sky{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+#dendro{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.plab{position:absolute;left:12px;top:10px;font:700 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);pointer-events:none}
+.count{position:absolute;right:12px;top:10px;font:700 18px var(--mono);border:1px solid var(--line);padding:4px 11px;border-radius:10px;pointer-events:none}
+.count small{font:500 11px var(--sans);color:var(--muted);margin-left:6px}
+.count:empty{display:none}
+
+#dendro .seg{fill:none;stroke:rgba(170,185,255,.55);stroke-width:1.6;stroke-linejoin:round}
+#dendro .seg.c{stroke-width:2.2}
+#dendro .seg.new{stroke-dasharray:1;stroke-dashoffset:1;animation:draw .5s ease-out forwards}
+#dendro .seg.hot{stroke:#fff;filter:drop-shadow(0 0 6px rgba(110,231,255,.9))}
+@keyframes draw{to{stroke-dashoffset:0}}
+#dendro .leaf{fill:#e9ecff}
+#dendro .ll{font:600 11px var(--mono);fill:var(--muted);text-anchor:middle}
+#dendro .ll.v{font-size:9.5px;text-anchor:end}
+#dendro .ax{stroke:var(--line-strong)}
+#dendro .tk{font:500 10.5px var(--mono);fill:var(--muted)}
+#dendro .grid{stroke:rgba(140,160,255,.08)}
+#dendro .cut{stroke:#ff6fa8;stroke-width:2;filter:drop-shadow(0 0 6px rgba(255,111,168,.9))}
+#dendro .cutglow{stroke:rgba(255,111,168,.18);stroke-width:12}
+#dendro .handle rect{fill:#2a0f22;stroke:#ff6fa8;stroke-width:1.5}
+#dendro .handle text{font:700 12px var(--mono);fill:#ffb3d1}
+#dendro .hlab{font:700 11px var(--mono);fill:var(--accent);paint-order:stroke;stroke:#070a1c;stroke-width:4px}
+#dendro.drag{cursor:ns-resize}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<link rel="stylesheet" href="../shared/cosmos.css">
+</head>
+<body>
+<div class="cosmos-stars" aria-hidden="true"><i class="s1"></i><i class="s2"></i></div>
+<header class="top">
+  <div class="brand">
+    <a class="back" href="../">← ML Explainers</a>
+    <h1>Hierarchical clustering <span>by hand</span></h1>
+    <p>Merge 10 cities yourself, watch R merge all 60, then cut the tree into clusters.</p>
+  </div>
+  <ol class="steps" id="steps">
+    <li data-s="data">Data</li><li data-s="merge">Merge</li><li data-s="all">All 60</li><li data-s="cut">Cut</li><li data-s="scale">Scale</li>
+  </ol>
+  <button class="btn ghost" id="musicBtn" aria-pressed="true">♫ Music on</button>
+  <button class="btn ghost" id="soundBtn" aria-pressed="true">Sound on</button>
+  <button class="btn ghost" id="resetBtn">Restart</button>
+</header>
+
+<main class="layout">
+  <section class="card" id="tableCard">
+    <div class="card-h"><h2 id="tblTitle">The 10 cities</h2><span class="muted small" id="tblSub"></span></div>
+    <div class="tbl-wrap" id="tblWrap"><table id="tbl"></table></div>
+  </section>
+
+  <section class="card" id="ctrl"></section>
+  <section class="card code" id="code"></section>
+
+  <section class="card stage">
+    <div class="stage-h"><h2 id="stTitle"></h2><p id="stSub"></p></div>
+    <div class="stage-b" id="stageB">
+      <div id="intro">
+        <div class="intro-grid">
+          <div class="icard"><div class="num">1</div><h3>Every city starts alone</h3><p>60 cities means 60 clusters of one. Nothing has been grouped yet.</p></div>
+          <div class="icard"><div class="num">2</div><h3>Merge the cheapest pair</h3><p>Join the two clusters whose merge costs least (Ward’s rule), then repeat until one cluster is left. The dendrogram records every merge.</p></div>
+          <div class="icard"><div class="num">3</div><h3>Cut the tree</h3><p>Slice the dendrogram at a height. Each branch you cut through is one cluster.</p></div>
+        </div>
+        <div class="mathgrid">
+          <div class="mcard"><div class="mlab">Scale each column (R’s scale)</div><div data-tex="\tip{z}{z_{ij}} = \dfrac{\tip{x}{x_{ij}} - \tip{xbar}{\bar{x}_j}}{\tip{s}{s_j}}" data-plain="z_ij = (x_ij − x̄_j) / s_j"></div></div>
+          <div class="mcard"><div class="mlab">Distance between two cities (dist)</div><div data-tex="\tip{d}{d(i,k)} = \sqrt{\sum_{\tip{j}{j}=1}^{\tip{p}{p}} \big(\tip{zi}{z_{ij}} - \tip{zk}{z_{kj}}\big)^2}" data-plain="d(i,k) = √( Σ_j (z_ij − z_kj)² )"></div></div>
+          <div class="mcard wide"><div class="mlab">Cost of merging clusters A and B (ward.D2), the height on the dendrogram</div><div data-tex="\tip{h}{h(A,B)} = \sqrt{\frac{2\,\tip{nA}{n_A}\,\tip{nB}{n_B}}{\tip{nA}{n_A} + \tip{nB}{n_B}}}\;\big\lVert \tip{cA}{\bar{z}_A} - \tip{cB}{\bar{z}_B} \big\rVert" data-plain="h(A,B) = √(2·n_A·n_B / (n_A + n_B)) · ‖z̄_A − z̄_B‖"></div></div>
+        </div>
+        <p class="mhint"><b>Hover or tap any symbol</b> to see what it means.</p>
+      </div>
+      <div id="duo" class="hide">
+        <div class="pane"><canvas id="sky"></canvas><div class="plab" id="skyLab">Sky</div><div class="count" id="count"></div></div>
+        <div class="pane"><svg id="dendro"></svg><div class="plab">Dendrogram</div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>window.MATH_TIPS = {
+ z: { name: 'Scaled value z', def: 'How many standard deviations city i sits above (or below) the average on column j. After scaling every column has mean 0 and sd 1, so no column wins just because of its units.' },
+ zi: { name: 'City i’s scaled value', def: 'The first city’s scaled value in column j.' },
+ zk: { name: 'City k’s scaled value', def: 'The second city’s scaled value in column j. The distance adds up the squared gaps between the two cities, column by column.' },
+ x: { name: 'Raw value x', def: 'The number in pollution.csv for city i, column j. DENS is in people per square mile (thousands); MORT is deaths per 100,000.' },
+ xbar: { name: 'Column mean', def: 'Average of column j over all 60 cities.' },
+ s: { name: 'Column sd', def: 'Standard deviation of column j over all 60 cities, dividing by n − 1 as R does.' },
+ d: { name: 'Euclidean distance', def: 'Straight-line distance between two cities. With 2 columns it is the distance you see on the sky; with 16 it is the same idea in 16 dimensions.', val: 'dist(x, method = "euclidean")' },
+ j: { name: 'Column j', def: 'Runs over the columns used: 2 in the by-hand step, all 16 for the full run.' },
+ p: { name: 'Number of columns p', def: 'How many columns go into the distance.', val: 'p = 2 by hand, 16 for all 60 cities' },
+ h: { name: 'Merge height h', def: 'Ward’s cost of joining A and B. hclust always makes the cheapest merge next, and draws it at this height on the dendrogram.', val: 'method = "ward.D2"' },
+ nA: { name: 'Size of A', def: 'Number of cities in cluster A. Big clusters cost more to merge, so Ward prefers to grow small ones first.' },
+ nB: { name: 'Size of B', def: 'Number of cities in cluster B.' },
+ cA: { name: 'Centroid of A', def: 'The average position of A’s cities (the + on the sky).' },
+ cB: { name: 'Centroid of B', def: 'The average position of B’s cities.' },
+};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="../shared/math.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/fx.js"></script>
+<script src="../shared/code.js"></script>
+<script src="../shared/pollution.js"></script>
+<script src="../shared/unsup.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const f2 = v => (Math.abs(v) < 0.005 ? 0 : v).toFixed(2);
+const TAU = Math.PI * 2;
+
+/* ---------------- data (all maths in shared/unsup.js, checked against R by tests/check.mjs) ---------------- */
+const P = window.POLLUTION, U = window.Unsup;
+const SHORT = P.cols.map(c => c.replace(/Real$/, ''));
+const iD = P.cols.indexOf('DENSReal'), iM = P.cols.indexOf('MORTReal');
+const N = P.rows.length;
+const SC = U.scale(P.rows), Z = SC.X;
+const HAND = P.hand.map(r => r - 1);                       // 0-based rows
+const HX = HAND.map(i => [Z[i][iD], Z[i][iM]]);
+const T_HAND = U.hclustWard(HX);
+const T_SC = U.hclustWard(Z), T_RAW = U.hclustWard(P.rows);
+const PCA = U.prcomp(Z, P.rSigns.full);
+const VARSHARE_RAW = (() => { const v = SC.sd.map(s => s * s), t = v.reduce((a, b) => a + b, 0); return v.map(x => x / t); })();
+
+const PAL = ['#6ee7ff', '#ff6fa8', '#ffc46b', '#4dffb4', '#a78bfa', '#5b8cff', '#ff8a5c', '#c6f36b', '#e879f9', '#2dd4bf'];
+const STAR = '#e9ecff', MUTED = 'rgba(170,185,255,.55)';
+
+const MAPS = {
+  pca:  { name: 'PCA map', x: i => PCA.x[i][0], y: i => PCA.x[i][1], xl: 'PC1', yl: 'PC2' },
+  dm:   { name: 'DENS × MORT', x: i => Z[i][iD], y: i => Z[i][iM], xl: 'DENS (scaled)', yl: 'MORT (scaled)' },
+  nox:  { name: 'NOX × MORT', x: i => Z[i][P.cols.indexOf('NOXReal')], y: i => Z[i][iM], xl: 'NOX (scaled)', yl: 'MORT (scaled)' },
+  so:   { name: 'SO × MORT', x: i => Z[i][P.cols.indexOf('SOReal')], y: i => Z[i][iM], xl: 'SO (scaled)', yl: 'MORT (scaled)' },
+};
+
+/* ---------------- state ---------------- */
+const ORDER = ['data', 'merge', 'all', 'cut', 'scale'];
+const S = {
+  stage: 'data', reached: 0, busy: false,
+  hand: null,                 // { cl:[{m:[local], col}], sel, pair, done, msg }
+  runT: 0, ran: false,        // merges of the 60-city tree drawn so far
+  map: 'pca', k: 4, cutH: null, scaled: true, prop: 'true', raw: false,
+  hover: -1, flashes: [], hotStep: -1,
+};
+function tree() { return S.stage === 'merge' || S.stage === 'data' ? T_HAND : (S.raw ? T_RAW : T_SC); }
+
+/* ---------------- code panel ---------------- */
+Code.mount('#code', {
+  R: [
+    ['read', 'pollution <- read.csv("pollution.csv")'],
+    ['scale', 'pollution_scaled <- data.frame(scale(pollution))'],
+    ['', ''],
+    ['', '# by hand: 10 cities, 2 columns'],
+    ['hand', 'hand <- pollution_scaled[c(1,5,9,16,24,28,33,41,49,59),'],
+    ['hand', '                         c("DENSReal","MORTReal")]'],
+    ['handhc', 'hclust(dist(hand), method="ward.D2")'],
+    ['', ''],
+    ['', '# all 60 cities, all 16 columns'],
+    ['dist', 'distances_scaled <- dist(pollution_scaled, method="euclidean")'],
+    ['hclust', 'clusterpollution2 <- hclust(distances_scaled, method="ward.D2")'],
+    ['plot', 'plot(clusterpollution2)'],
+    ['cutree', 'clusterGroups2 <- cutree(clusterpollution2, k=4)'],
+    ['tapply', 'tapply(pollution$MORTReal, clusterGroups2, mean)'],
+    ['plotdm', 'plot(pollution_scaled$DENSReal, pollution_scaled$MORTReal,'],
+    ['plotdm', '     col=clusterGroups2, pch=19)'],
+    ['', ''],
+    ['', '# what the script tried first: no scale()'],
+    ['raw', 'distances <- dist(pollution, method="euclidean")'],
+    ['raw', 'clusterpollution1 <- hclust(distances, method="ward.D2")'],
+    ['raw', 'clusterGroups1 <- cutree(clusterpollution1, k=4)'],
+    ['rawplot', 'plot(pollution$DENSReal, pollution$MORTReal, col=clusterGroups1, pch=19)'],
+  ],
+  Python: [
+    ['read', 'import pandas as pd'],
+    ['read', 'from scipy.cluster.hierarchy import linkage, dendrogram, fcluster'],
+    ['read', 'pollution = pd.read_csv("pollution.csv")'],
+    ['scale', 'pollution_scaled = (pollution - pollution.mean()) / pollution.std()  # sd uses n-1, like R'],
+    ['', ''],
+    ['', '# by hand: 10 cities, 2 columns (R rows 1,5,9,... are pandas rows 0,4,8,...)'],
+    ['hand', 'hand = pollution_scaled.iloc[[0,4,8,15,23,27,32,40,48,58]][["DENSReal","MORTReal"]]'],
+    ['handhc', 'linkage(hand, method="ward")      # same heights as R ward.D2'],
+    ['', ''],
+    ['', '# all 60 cities, all 16 columns'],
+    ['dist', '# linkage() computes the Euclidean distances itself'],
+    ['hclust', 'Z = linkage(pollution_scaled, method="ward")'],
+    ['plot', 'dendrogram(Z)'],
+    ['cutree', 'groups = fcluster(Z, t=4, criterion="maxclust")   # numbering may differ from R'],
+    ['tapply', 'pollution.groupby(groups)["MORTReal"].mean()'],
+    ['plotdm', 'pollution_scaled.plot.scatter("DENSReal", "MORTReal", c=groups, cmap="tab10")'],
+    ['', ''],
+    ['', '# what the script tried first: no scaling'],
+    ['raw', 'Z_raw = linkage(pollution, method="ward")'],
+    ['raw', 'groups_raw = fcluster(Z_raw, t=4, criterion="maxclust")'],
+    ['rawplot', 'pollution.plot.scatter("DENSReal", "MORTReal", c=groups_raw, cmap="tab10")'],
+  ],
+});
+
+/* ---------------- groups and colours ---------------- */
+function groups() {                       // per global row: group number (1-based) or 0 when nothing is cut
+  if (S.stage === 'cut' || S.stage === 'scale') return U.cutree(tree(), S.k);
+  return null;
+}
+function handColour() {                   // per global row in the hand step
+  const out = new Map();
+  if (!S.hand) return out;
+  S.hand.cl.forEach(c => c.m.forEach(l => out.set(HAND[l], c.m.length > 1 ? c.col : STAR)));
+  return out;
+}
+function runColour() {                    // colours while the 60-city run merges: clusters of 2+ glow in their colour
+  const T = tree(), n = T.n, parent = Array.from({ length: n }, (_, i) => i), find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
+  for (let s = 0; s < S.runT; s++) parent[find(T.steps[s].b[0])] = find(T.steps[s].a[0]);
+  const size = new Map(); for (let i = 0; i < n; i++) size.set(find(i), (size.get(find(i)) || 0) + 1);
+  return i => size.get(find(i)) > 1 ? PAL[find(i) % PAL.length] : STAR;
+}
+function colourOf() {
+  const g = groups();
+  if (g) return i => PAL[(g[i] - 1) % PAL.length];
+  if (S.stage === 'merge' || S.stage === 'data') { const m = handColour(); return i => m.get(i) || STAR; }
+  if (S.stage === 'all') return runColour();
+  return () => STAR;
+}
+
+/* ---------------- sky (canvas) ---------------- */
+const cv = $('#sky'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+const disp = Array.from({ length: N }, () => ({ x: 0, y: 0, a: 0, init: false }));
+function skyModel() {
+  if (S.stage === 'data' || S.stage === 'merge') {
+    return { pts: HAND, x: i => Z[i][iD], y: i => Z[i][iM], xl: 'DENS (scaled)', yl: 'MORT (scaled)', equal: true, labels: true };
+  }
+  if (S.stage === 'scale') {
+    if (!S.raw) return { pts: range(N), x: i => Z[i][iD], y: i => Z[i][iM], xl: 'DENS (scaled)', yl: 'MORT (scaled)', equal: false };
+    return { pts: range(N), x: i => P.rows[i][iD], y: i => P.rows[i][iM], xl: 'DENS (people per sq. mile)', yl: 'MORT (deaths per 100,000)', equal: S.prop === 'true' };
+  }
+  const m = MAPS[S.map];
+  return { pts: range(N), x: m.x, y: m.y, xl: m.xl, yl: m.yl, equal: !!m.equal };
+}
+function range(n) { return Array.from({ length: n }, (_, i) => i); }
+let VIEW = null;
+function computeView(M) {
+  const xs = M.pts.map(M.x), ys = M.pts.map(M.y);
+  let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const px = (x1 - x0) * .08 || 1, py = (y1 - y0) * .08 || 1;
+  x0 -= px; x1 += px; y0 -= py; y1 += py;
+  const L = 54, R = 18, T = 34, B = 40, w = W - L - R, h = H - T - B;
+  let sx = w / (x1 - x0), sy = h / (y1 - y0);
+  if (M.equal) { const s = Math.min(sx, sy); sx = sy = s; }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, ox = L + w / 2, oy = T + h / 2;
+  return { sx, sy, X: v => ox + (v - cx) * sx, Y: v => oy - (v - cy) * sy, inv: (px, py) => [cx + (px - ox) / sx, cy - (py - oy) / sy], L, R, T, B };
+}
+function resize() {
+  const r = cv.getBoundingClientRect(); DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = Math.max(10, r.width); H = Math.max(10, r.height);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  drawDendro();
+}
+function niceTicks(a, b, n) {
+  const span = b - a, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0))), err = step0 / mag;
+  const step = (err >= 7 ? 10 : err >= 3 ? 5 : err >= 1.5 ? 2 : 1) * mag, out = [];
+  for (let v = Math.ceil(a / step) * step; v <= b + 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+function hull(pts) {
+  if (pts.length < 3) return pts.slice();
+  const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (const q of p.slice().reverse()) { while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+function blob(pts, col, alpha) {           // rounded halo around a group of points
+  const hp = hull(pts);
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath(); hp.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); if (hp.length > 2) ctx.closePath();
+  ctx.strokeStyle = col; ctx.globalAlpha = alpha * .55; ctx.lineWidth = 30; ctx.stroke();
+  if (hp.length > 2) { ctx.fillStyle = col; ctx.globalAlpha = alpha * .5; ctx.fill(); }
+  ctx.globalAlpha = alpha * 1.3; ctx.lineWidth = 1; ctx.setLineDash([3, 5]); ctx.stroke();
+  ctx.restore();
+}
+function centroid(members) { let x = 0, y = 0; members.forEach(i => { x += disp[i].x; y += disp[i].y; }); return [x / members.length, y / members.length]; }
+
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (!W || $('#duo').classList.contains('hide')) return;
+  const M = skyModel(); VIEW = computeView(M);
+  const inSet = new Set(M.pts), col = colourOf();
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, W, H);
+
+  // axes and grid
+  const [gx0, gy1] = VIEW.inv(VIEW.L, VIEW.T), [gx1, gy0] = VIEW.inv(W - VIEW.R, H - VIEW.B);
+  ctx.font = '500 10.5px JetBrains Mono, monospace'; ctx.lineWidth = 1;
+  const tx = niceTicks(gx0, gx1, Math.max(3, Math.floor(W / 110))), ty = niceTicks(gy0, gy1, Math.max(3, Math.floor(H / 70)));
+  ctx.strokeStyle = 'rgba(140,160,255,.07)'; ctx.fillStyle = 'rgba(142,151,189,.85)';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  tx.forEach(v => { const x = VIEW.X(v); ctx.beginPath(); ctx.moveTo(x, VIEW.T); ctx.lineTo(x, H - VIEW.B); ctx.stroke(); ctx.fillText(fmtTick(v), x, H - VIEW.B + 6); });
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ty.forEach(v => { const y = VIEW.Y(v); if (y < VIEW.T - 1 || y > H - VIEW.B + 1) return; ctx.beginPath(); ctx.moveTo(VIEW.L, y); ctx.lineTo(W - VIEW.R, y); ctx.stroke(); ctx.fillText(fmtTick(v), VIEW.L - 6, y); });
+  ctx.fillStyle = '#c9d0f5'; ctx.font = '600 11.5px Space Grotesk, sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(M.xl + ' →', W - VIEW.R, H - VIEW.B - 4);
+  ctx.save(); ctx.translate(14, VIEW.T + 4); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText(M.yl + ' →', 0, 0); ctx.restore();
+
+  // positions glide to their targets
+  for (let i = 0; i < N; i++) {
+    const d = disp[i], on = inSet.has(i);
+    if (on) {
+      const tx2 = VIEW.X(M.x(i)), ty2 = VIEW.Y(M.y(i));
+      if (!d.init) { d.x = tx2; d.y = ty2; d.init = true; }
+      d.x = lerp(d.x, tx2, .11); d.y = lerp(d.y, ty2, .11);
+    }
+    d.a = lerp(d.a, on ? 1 : 0, .08);
+  }
+
+  // halos, links and centroids
+  CENTS = [];
+  drawStructure(col);
+
+  // flashes
+  S.flashes = S.flashes.filter(f => t - f.t0 < 900);
+  for (const f of S.flashes) {
+    const k = (t - f.t0) / 900;
+    ctx.beginPath(); ctx.arc(f.x, f.y, 6 + k * 46, 0, TAU);
+    ctx.strokeStyle = f.col; ctx.globalAlpha = (1 - k) * .9; ctx.lineWidth = 2.5 * (1 - k) + .5; ctx.stroke(); ctx.globalAlpha = 1;
+    FX.glow(ctx, f.x, f.y, 40 * (1 - k * .5), f.col, .55 * (1 - k));
+  }
+
+  // stars
+  const sel = selectedSet(), big = M.pts.length <= 10;
+  for (let i = 0; i < N; i++) {
+    const d = disp[i]; if (d.a < .02) continue;
+    const c = col(i), r = (big ? 6.5 : 4.2) * (S.hover === i ? 1.35 : 1);
+    ctx.globalAlpha = d.a;
+    FX.ball(ctx, null, { x: d.x, y: d.y, r }, c, { glow: true });
+    if (sel.has(i)) { ctx.beginPath(); ctx.arc(d.x, d.y, r + 7 + Math.sin(t / 180) * 1.5, 0, TAU); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8; ctx.stroke(); }
+    ctx.globalAlpha = 1;
+  }
+  if (M.labels) placeLabels(M.pts);
+  if (S.hover >= 0 && !M.labels && disp[S.hover].a > .5) tooltip(S.hover);
+  if (S.stage === 'merge') drawPairCost();
+  CENTS.forEach(c => drawCentre(c.p, c.col, t));
+}
+// city labels: each tries 4 spots around its star and takes the first that clears every star and earlier label
+function placeLabels(pts) {
+  ctx.font = '700 12px JetBrains Mono, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const boxes = [], stars = pts.map(i => disp[i]);
+  CENTS.forEach(c => boxes.push({ x: c.p[0] - 17, y: c.p[1] - 17, w: 34, h: 34 }));   // keep labels off the centres
+  const hit = (b) => boxes.some(o => b.x < o.x + o.w && b.x + b.w > o.x && b.y < o.y + o.h && b.y + b.h > o.y) ||
+    stars.some(s => s.x > b.x - 6 && s.x < b.x + b.w + 6 && s.y > b.y - 6 && s.y < b.y + b.h + 6);
+  pts.slice().sort((a, b) => disp[a].x - disp[b].x).forEach(i => {
+    const d = disp[i]; if (d.a < .3) return;
+    const lab = '#' + (i + 1), w = ctx.measureText(lab).width + 8, h = 17;
+    const spots = [[10, -h - 4], [10, 4], [-w - 10, -h - 4], [-w - 10, 4], [-w / 2, -h - 12], [-w / 2, 12]];
+    let b = null;
+    for (const [dx, dy] of spots) { const c = { x: d.x + dx, y: d.y + dy, w, h }; if (!hit(c)) { b = c; break; } }
+    if (!b) b = { x: d.x + 10, y: d.y - h - 4, w, h };
+    boxes.push(b);
+    ctx.globalAlpha = d.a; ctx.fillStyle = 'rgba(4,6,16,.82)'; ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle = S.hover === i ? '#fff' : '#c9d0f5'; ctx.fillText(lab, b.x + 4, b.y + h / 2 + 1);
+  });
+  ctx.globalAlpha = 1;
+}
+function fmtTick(v) { const a = Math.abs(v); return a >= 1000 ? +(v / 1000).toFixed(1) + 'k' : a >= 10 ? String(Math.round(v)) : String(+v.toFixed(2)); }
+function tooltip(i) {
+  const d = disp[i], g = groups();
+  const lines = [`City #${i + 1}${HAND.includes(i) ? ' ★' : ''}`, `DENS ${P.rows[i][iD]}   MORT ${P.rows[i][iM].toFixed(0)}`];
+  if (g) lines.push(`cluster ${g[i]}`);
+  ctx.font = '600 12px JetBrains Mono, monospace';
+  const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 18, h = lines.length * 17 + 10;
+  let x = d.x + 14, y = d.y - h - 8; if (x + w > W - 4) x = d.x - w - 14; if (y < 4) y = d.y + 12;
+  ctx.fillStyle = 'rgba(9,11,28,.95)'; ctx.strokeStyle = 'rgba(110,231,255,.45)'; ctx.lineWidth = 1;
+  roundRect(x, y, w, h, 8); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#e9ecff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  lines.forEach((l, k) => { ctx.fillStyle = k ? '#aab3dc' : '#fff'; ctx.fillText(l, x + 9, y + 7 + k * 17); });
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+function link(a, b, col, alpha, w) {
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = col;
+  ctx.globalAlpha = alpha * .25; ctx.lineWidth = w + 5; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  ctx.globalAlpha = alpha; ctx.lineWidth = w; ctx.stroke(); ctx.restore();
+}
+function cross(p, col) { CENTS.push({ p, col }); }      // queued: centres are drawn last, above stars and labels
+let CENTS = [];
+// a cluster centre: glowing ring with a crosshair, drawn on top so it is never hidden
+function drawCentre(p, col, t) {
+  const [x, y] = p, pulse = 1 + Math.sin(t / 260) * .08, R = 10 * pulse;
+  FX.glow(ctx, x, y, 30, col, .55);
+  ctx.save();
+  ctx.fillStyle = 'rgba(4,6,16,.75)'; ctx.beginPath(); ctx.arc(x, y, R + 2, 0, TAU); ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.beginPath();
+  ctx.moveTo(x - R - 5, y); ctx.lineTo(x - 4, y); ctx.moveTo(x + 4, y); ctx.lineTo(x + R + 5, y);
+  ctx.moveTo(x, y - R - 5); ctx.lineTo(x, y - 4); ctx.moveTo(x, y + 4); ctx.lineTo(x, y + R + 5); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 2.2, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+function drawStructure(col) {
+  const st = S.stage;
+  if (st === 'merge' && S.hand) {
+    S.hand.cl.forEach(c => { if (c.m.length > 1) blob(c.m.map(l => [disp[HAND[l]].x, disp[HAND[l]].y]), c.col, .16); });
+    for (let s = 0; s < S.hand.done; s++) {
+      const stp = T_HAND.steps[s], A = stp.a.map(l => HAND[l]), B = stp.b.map(l => HAND[l]);
+      link(centroid(A), centroid(B), col(A[0]), .55, 1.4);
+    }
+    S.hand.cl.forEach(c => { if (c.m.length > 1) cross(centroid(c.m.map(l => HAND[l])), c.col); });
+    return;
+  }
+  if (st === 'all' || st === 'cut' || st === 'scale') {
+    const T = tree(), upto = st === 'all' ? S.runT : N - 1, g = groups(), cutH = S.cutH;
+    if (g) {
+      const by = new Map(); for (let i = 0; i < N; i++) { if (!by.has(g[i])) by.set(g[i], []); by.get(g[i]).push(i); }
+      by.forEach((m, k) => blob(m.map(i => [disp[i].x, disp[i].y]), PAL[(k - 1) % PAL.length], m.length > 1 ? .09 : .05));
+      if (by.size <= 10) by.forEach((m, k) => { if (m.length > 1) cross(centroid(m), PAL[(k - 1) % PAL.length]); });
+    }
+    for (let s = 0; s < upto; s++) {
+      const stp = T.steps[s];
+      if (g && stp.h > cutH) continue;
+      const hot = s === S.hotStep;
+      link(centroid(stp.a), centroid(stp.b), hot ? '#ffffff' : col(stp.a[0]), hot ? .95 : .32, hot ? 2.2 : 1);
+    }
+  }
+}
+function selectedSet() {
+  const s = new Set();
+  if (S.stage === 'merge' && S.hand) {
+    if (S.hand.sel != null) S.hand.cl[S.hand.sel].m.forEach(l => s.add(HAND[l]));
+    if (S.hand.pair) [S.hand.pair.A, S.hand.pair.B].forEach(c => c.m.forEach(l => s.add(HAND[l])));
+  }
+  return s;
+}
+function drawPairCost() {
+  const p = S.hand.pair; if (!p) return;
+  const a = centroid(p.A.m.map(l => HAND[l])), b = centroid(p.B.m.map(l => HAND[l]));
+  ctx.save(); ctx.setLineDash([6, 6]); ctx.lineDashOffset = -performance.now() / 40;
+  ctx.strokeStyle = p.ok ? '#4dffb4' : '#ff5d8f'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.restore();
+  cross(a, '#fff'); cross(b, '#fff');
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, lab = 'h = ' + p.cost.toFixed(2);
+  ctx.font = '700 13px JetBrains Mono, monospace'; const w = ctx.measureText(lab).width + 14;
+  ctx.fillStyle = 'rgba(9,11,28,.92)'; roundRect(mx - w / 2, my - 12, w, 24, 7); ctx.fill();
+  ctx.strokeStyle = p.ok ? '#4dffb4' : '#ff5d8f'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = p.ok ? '#4dffb4' : '#ff9ab8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(lab, mx, my + 1);
+}
+function hitStar(px, py) {
+  const M = skyModel(); let best = -1, bd = 22 * 22;
+  for (const i of M.pts) { const d = disp[i], dd = (d.x - px) ** 2 + (d.y - py) ** 2; if (d.a > .5 && dd < bd) { bd = dd; best = i; } }
+  return best;
+}
+cv.addEventListener('pointermove', e => {
+  const r = cv.getBoundingClientRect(), i = hitStar(e.clientX - r.left, e.clientY - r.top);
+  if (i !== S.hover) { S.hover = i; markRow(i); }
+  cv.style.cursor = i >= 0 && S.stage === 'merge' ? 'pointer' : 'crosshair';
+});
+cv.addEventListener('pointerleave', () => { S.hover = -1; markRow(-1); });
+cv.addEventListener('pointerdown', e => {
+  if (S.stage !== 'merge' || S.busy) return;
+  const r = cv.getBoundingClientRect(), i = hitStar(e.clientX - r.left, e.clientY - r.top);
+  if (i < 0) { S.hand.sel = null; S.hand.pair = null; renderCtrl(); return; }
+  pickCluster(S.hand.cl.findIndex(c => c.m.includes(HAND.indexOf(i))));
+});
+
+/* ---------------- dendrogram (svg) ---------------- */
+const svg = $('#dendro');
+let DG = null;                              // layout of the current drawing, for dragging the cut
+function drawDendro(newStep = -1) {
+  const r = svg.getBoundingClientRect(); if (!r.width) return;
+  const w = r.width, h = r.height, T = tree(), n = T.n;
+  const upto = S.stage === 'merge' || S.stage === 'data' ? (S.hand ? S.hand.done : 0) : S.stage === 'all' ? S.runT : n - 1;
+  const hmax = Math.max(...T.height) * 1.08;
+  const slotW = (w - 66) / n, vert = n > 12, showLab = vert ? slotW >= 11 : slotW >= 22;
+  const L = 50, R = 16, Tp = 48, B = showLab ? (vert ? 34 : 30) : 16;
+  const X = slot => L + (slot + .5) * (w - L - R) / n, Y = v => h - B - v / hmax * (h - Tp - B);
+  const pos = new Array(n), node = [];
+  T.order.forEach((obs, slot) => pos[obs - 1] = slot);
+  const g = groups(), cutH = S.cutH;
+  const at = ref => ref < 0 ? { x: X(pos[-ref - 1]), y: Y(0) } : node[ref - 1];
+  let out = '';
+  niceTicks(0, hmax, Math.max(3, Math.floor(h / 55))).forEach(v => {
+    out += `<line class="grid" x1="${L}" x2="${w - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tk" x="${L - 8}" y="${Y(v) + 3.5}" text-anchor="end">${fmtTick(v)}</text>`;
+  });
+  out += `<line class="ax" x1="${L}" x2="${L}" y1="${Tp - 6}" y2="${h - B}"/><text class="tk" x="${L - 8}" y="${Tp - 14}" text-anchor="end">height</text>`;
+  for (let s = 0; s < n - 1; s++) {
+    const [ra, rb] = T.merge[s], a = at(ra), b = at(rb), y = Y(T.height[s]);
+    node.push({ x: (a.x + b.x) / 2, y });
+    if (s >= upto) continue;
+    let cls = 'seg', stroke = '';
+    if (g && T.height[s] <= cutH) { cls += ' c'; stroke = ` style="stroke:${PAL[(g[T.steps[s].a[0]] - 1) % PAL.length]}"`; }
+    if (s === newStep) cls += ' new';
+    if (s === S.hotStep) cls += ' hot';
+    out += `<path class="${cls}"${stroke} pathLength="1" d="M${a.x},${a.y}V${y}H${b.x}V${b.y}"/>`;
+  }
+  T.order.forEach((obs, slot) => {
+    const i = obs - 1, gi = S.stage === 'merge' || S.stage === 'data' ? HAND[i] : i;
+    const c = g ? PAL[(g[gi] - 1) % PAL.length] : (S.stage === 'merge' ? (handColour().get(gi) || STAR) : STAR);
+    out += `<circle class="leaf" cx="${X(slot)}" cy="${Y(0)}" r="${n > 20 ? 2.4 : 4}" style="fill:${c}"/>`;
+    if (showLab) out += vert
+      ? `<text class="ll v" transform="translate(${X(slot) + 3.5},${Y(0) + 8}) rotate(-90)" text-anchor="end">${gi + 1}</text>`
+      : `<text class="ll" x="${X(slot)}" y="${Y(0) + 17}">${gi + 1}</text>`;
+  });
+  if (S.stage === 'merge' && S.hand && S.hand.done) {
+    const s = S.hand.done - 1, nd = node[s];
+    out += `<text class="hlab" x="${nd.x}" y="${nd.y - 7}" text-anchor="middle">${T.height[s].toFixed(2)}</text>`;
+  }
+  if (g) {
+    const y = Y(cutH);
+    out += `<line class="cutglow" x1="${L}" x2="${w - R}" y1="${y}" y2="${y}"/><line class="cut" x1="${L}" x2="${w - R}" y1="${y}" y2="${y}"/>`;
+    const lab = `k = ${S.k} · h = ${fmtTick(cutH)}`, lw = lab.length * 7.4 + 16;
+    out += `<g class="handle"><rect x="${w - R - lw}" y="${y - 24}" width="${lw}" height="20" rx="6"/><text x="${w - R - lw / 2}" y="${y - 10}" text-anchor="middle">${lab}</text></g>`;
+  }
+  svg.innerHTML = out;
+  DG = { Y, inv: py => (h - B - py) / (h - Tp - B) * hmax, hmax };
+}
+let dragging = false;
+function cutFromY(py) {
+  const T = tree(), hv = clamp(DG.inv(py), 0.0001, DG.hmax * .999);
+  const k = clamp(T.n - T.height.filter(v => v <= hv).length, 1, 10);
+  const kChanged = k !== S.k;
+  S.k = k; S.cutH = U.cutHeight(T, k);
+  if (kChanged) { Sound.tick(k); renderCtrl(); renderTable(); }
+  drawDendro();
+}
+svg.addEventListener('pointerdown', e => {
+  if (!(S.stage === 'cut' || S.stage === 'scale') || !DG || S.busy) return;
+  dragging = true; svg.classList.add('drag'); svg.setPointerCapture(e.pointerId);
+  cutFromY(e.clientY - svg.getBoundingClientRect().top);
+});
+svg.addEventListener('pointermove', e => { if (dragging) cutFromY(e.clientY - svg.getBoundingClientRect().top); });
+svg.addEventListener('pointerup', () => { dragging = false; svg.classList.remove('drag'); });
+
+/* ---------------- table ---------------- */
+function renderTable() {
+  const big = !(S.stage === 'data' || S.stage === 'merge');
+  const g = groups(), hc = handColour();
+  $('#tblTitle').textContent = big ? 'All 60 cities' : 'The 10 cities';
+  $('#tblSub').textContent = big ? '16 columns · ★ = the 10 from step 2' : 'R rows · raw and scaled';
+  let h = '<thead><tr><th>City</th><th>DENS<small>per sq. mile</small></th><th>MORT<small>per 100k</small></th>';
+  if (!big) h += '<th>z DENS<small>scaled</small></th><th>z MORT<small>scaled</small></th><th>Cluster<small>so far</small></th>';
+  else h += '<th>Cluster<small>' + (g ? `cutree k=${S.k}` : '—') + '</small></th>';
+  h += '</tr></thead><tbody>';
+  const rows = big ? range(N) : HAND;
+  rows.forEach(i => {
+    const cl = [];
+    if (big && HAND.includes(i)) cl.push('hand');
+    let cell;
+    if (big) cell = g ? `<span class="gpill" style="color:${PAL[(g[i] - 1) % PAL.length]}"><i class="dot" style="background:currentColor"></i>${g[i]}</span>` : '<span class="muted">·</span>';
+    else {
+      const c = hc.get(i), lone = !c || c === STAR, hcl = S.hand && S.hand.cl.find(x => x.m.includes(HAND.indexOf(i)));
+      cell = lone ? '<span class="muted">alone</span>' : `<span class="gpill" style="color:${c}"><i class="dot" style="background:currentColor"></i>${hcl.m.length} cities</span>`;
+    }
+    h += `<tr data-i="${i}" class="${cl.join(' ')}"><td class="idx">#${i + 1}</td><td>${P.rows[i][iD]}</td><td>${P.rows[i][iM].toFixed(1)}</td>` +
+      (big ? '' : `<td class="z">${f2(Z[i][iD])}</td><td class="z">${f2(Z[i][iM])}</td>`) + `<td>${cell}</td></tr>`;
+  });
+  $('#tbl').innerHTML = h + '</tbody>';
+  markRow(S.hover);
+}
+function markRow(i) { document.querySelectorAll('#tbl tr.hl').forEach(r => r.classList.remove('hl')); if (i >= 0) { const r = document.querySelector(`#tbl tr[data-i="${i}"]`); if (r) r.classList.add('hl'); } }
+$('#tbl').addEventListener('pointerover', e => { const r = e.target.closest('tr[data-i]'); S.hover = r ? +r.dataset.i : -1; markRow(S.hover); });
+$('#tbl').addEventListener('pointerleave', () => { S.hover = -1; markRow(-1); });
+
+/* ---------------- hand merging ---------------- */
+function initHand() {
+  S.hand = { cl: HAND.map((_, l) => ({ m: [l], col: STAR })), sel: null, pair: null, done: 0, used: 0 };
+}
+function cost(A, B) { return U.wardCost(HX, A.m, B.m); }
+function cheapest() {
+  const c = S.hand.cl; let best = null;
+  for (let a = 0; a < c.length; a++) for (let b = a + 1; b < c.length; b++) { const v = cost(c[a], c[b]); if (!best || v < best.cost) best = { a, b, cost: v }; }
+  return best;
+}
+function pickCluster(ci) {
+  const H = S.hand; if (ci < 0) return;
+  if (H.pair) { H.pair = null; H.sel = ci; Sound.select(); renderCtrl(); return; }
+  if (H.sel == null || H.sel === ci) { H.sel = H.sel === ci ? null : ci; Sound.select(); renderCtrl(); return; }
+  const A = H.cl[H.sel], B = H.cl[ci], best = cheapest(), c = cost(A, B);
+  H.pair = { A, B, ai: H.sel, bi: ci, cost: c, ok: Math.abs(c - best.cost) < 1e-12, best };
+  H.sel = null;
+  H.pair.ok ? Sound.add() : Sound.stop();
+  renderCtrl();
+}
+function centroidZ(m) { const c = [0, 0]; m.forEach(l => { c[0] += HX[l][0]; c[1] += HX[l][1]; }); return c.map(v => v / m.length); }
+function doMerge() {
+  const H = S.hand, p = H.pair; if (!p || !p.ok) return;
+  const nextCol = PAL[H.used % PAL.length];
+  const col = p.A.m.length > 1 ? p.A.col : p.B.m.length > 1 ? p.B.col : (H.used++, nextCol);
+  const merged = { m: p.A.m.concat(p.B.m), col };
+  H.cl = H.cl.filter(c => c !== p.A && c !== p.B); H.cl.push(merged);
+  H.done++; H.pair = null; H.sel = null;
+  const c = centroid(merged.m.map(l => HAND[l]));
+  S.flashes.push({ x: c[0], y: c[1], col, t0: performance.now() });
+  Sound.split(); drawDendro(H.done - 1); renderTable(); renderCtrl();
+  if (H.done === HAND.length - 1) { Sound.complete(); Code.focus(['handhc']); }
+}
+async function autoFinish() {
+  S.busy = true; renderCtrl();
+  while (S.hand.done < HAND.length - 1 && S.stage === 'merge') {
+    const b = cheapest(), H = S.hand;
+    H.pair = { A: H.cl[b.a], B: H.cl[b.b], cost: b.cost, ok: true, best: b };
+    renderCtrl(); await sleep(520);
+    if (S.stage !== 'merge') break;
+    doMerge(); await sleep(380);
+  }
+  S.busy = false; renderCtrl();
+}
+
+/* ---------------- the 60-city run ---------------- */
+async function runAll() {
+  if (S.busy) return;
+  S.busy = true; S.runT = 0; S.skip = false; renderCtrl(); drawDendro();
+  Sound.riser(2.2); await sleep(1600);
+  const T = tree();
+  for (let s = 0; s < N - 1; s++) {
+    if (S.stage !== 'all') break;
+    S.runT = s + 1; S.hotStep = s;
+    const c = centroid(T.steps[s].a.concat(T.steps[s].b));
+    S.flashes.push({ x: c[0], y: c[1], col: s >= N - 4 ? '#ffffff' : '#6ee7ff', t0: performance.now() });
+    drawDendro(s); setCount();
+    if (S.skip) continue;
+    const late = s >= N - 6;
+    late ? Sound.tick(s - (N - 6)) : Sound.pop(s, (c[0] / W) * 1.6 - .8);
+    await sleep(late ? 620 : lerp(230, 55, s / (N - 7)));
+  }
+  S.hotStep = -1; S.busy = false; S.ran = true;
+  if (S.stage === 'all') { Sound.complete(); drawDendro(); setCount(); renderCtrl(); Code.focus(['plot']); }
+}
+function setCount() {
+  const T = tree();
+  $('#count').innerHTML = S.stage === 'all' && S.runT ? `${S.runT} / ${N - 1}<small>merges · h ${T.height[S.runT - 1].toFixed(2)}</small>` : '';
+}
+async function sweepCut(k) {
+  const T = tree(), from = Math.max(...T.height) * 1.04, to = U.cutHeight(T, k), t0 = performance.now(), dur = 1100;
+  S.k = T.n; S.busy = true;
+  return new Promise(res => {
+    const step = now => {
+      const u = clamp((now - t0) / dur, 0, 1), hv = lerp(from, to, ease(u));
+      const kk = clamp(T.n - T.height.filter(v => v <= hv).length, 1, T.n);
+      if (kk !== S.k && kk <= 10) Sound.tick(kk);
+      S.k = Math.min(kk, 10); S.cutH = hv; drawDendro();
+      if (u < 1) requestAnimationFrame(step); else { S.k = k; S.cutH = to; S.busy = false; drawDendro(); renderCtrl(); renderTable(); res(); }
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+/* ---------------- stage + chrome ---------------- */
+const TITLES = {
+  data:  ['How hierarchical clustering works', 'Three ideas, one at a time. Start in the panel on the left.'],
+  merge: ['Merge the cities yourself', 'Click two stars to price their merge. Only the cheapest merge is allowed.'],
+  all:   ['All 60 cities, all 16 columns', 'Same rule, 59 merges. The sky is a 2-D map; the distances use all 16 columns.'],
+  cut:   ['Cut the tree', 'Drag the pink laser up or down on the dendrogram.'],
+  scale: ['What if we skip scale()?', 'The script clustered the raw numbers first. Switch scaling off and watch.'],
+};
+function setStage(st) {
+  S.stage = st; S.reached = Math.max(S.reached, ORDER.indexOf(st));
+  Sound.mood(st === 'data' ? 'intro' : st === 'merge' ? 'build' : st === 'all' ? 'forest' : 'predict');
+  const k = ORDER.indexOf(st);
+  document.querySelectorAll('#steps li').forEach((li, i) => {
+    li.classList.toggle('active', i === k); li.classList.toggle('done', i < k || (i <= S.reached && i !== k)); li.classList.toggle('reach', i <= S.reached && i !== k);
+  });
+  $('#stTitle').textContent = TITLES[st][0]; $('#stSub').textContent = TITLES[st][1];
+  $('#intro').classList.toggle('hide', st !== 'data');
+  $('#duo').classList.toggle('hide', st === 'data');
+  layoutDuo();
+  $('#skyLab').textContent = st === 'merge' ? 'Sky · 10 cities, 2 scaled columns' : st === 'scale' ? 'Sky · DENS × MORT' : 'Sky · ' + MAPS[S.map].name;
+  if (st === 'merge' && !S.hand) initHand();
+  if (st === 'cut' || st === 'scale') { if (S.cutH == null || S.k > 10) S.cutH = U.cutHeight(tree(), S.k); }
+  if (st === 'scale') S.k = 4, S.cutH = U.cutHeight(tree(), 4);
+  Code.focus({ data: ['read', 'scale'], merge: ['hand'], all: ['dist', 'hclust'], cut: ['cutree', 'tapply'], scale: ['plotdm'] }[st]);
+  setCount(); renderCtrl(); renderTable();
+  requestAnimationFrame(() => { resize(); drawDendro(); });
+}
+function layoutDuo() {
+  const r = $('#stageB').getBoundingClientRect();
+  $('#duo').classList.toggle('side', S.stage === 'merge' && r.width >= 760 && r.width > r.height * 1.05);
+}
+document.querySelectorAll('#steps li').forEach((li, i) => li.addEventListener('click', () => {
+  if (i <= S.reached && !S.busy && ORDER[i] !== S.stage) { Sound.ui(); setStage(ORDER[i]); }
+}));
+
+/* ---------------- control panel ---------------- */
+function prog(done, total) { return `<div class="prog">${range(total).map(i => `<i class="${i < done ? 'on' : ''}"></i>`).join('')}</div>`; }
+const kick = t => `<div class="kicker">${t}</div>`;
+function renderCtrl() {
+  const st = S.stage; let h = '';
+  if (st === 'data') {
+    h = kick('Step 1 · The data') + `<h3>60 cities, 16 numbers each</h3>
+      <p><b>pollution.csv</b> describes 60 US metro areas in 1960: rainfall, temperature, income, housing, three pollution potentials and the mortality rate. No column says which group a city belongs to. Clustering has to find the groups by itself.</p>
+      <p>Start small: <b>10 cities</b> and <b>2 columns</b>, population density (DENS) and mortality (MORT). Both are scaled, so one step on either axis means one standard deviation.</p>
+      <div class="row"><button class="btn primary" data-act="go-merge">Light up the 10 cities →</button></div>`;
+  } else if (st === 'merge') {
+    const H = S.hand, total = HAND.length - 1;
+    h = kick('Step 2 · Merge by hand') + `<h3>${H.done === total ? 'One cluster left' : 'Join the cheapest pair'}</h3>` + prog(H.done, total);
+    if (H.done < total) {
+      h += `<p>Each city starts as its own cluster. <b>Click two stars</b> to see what merging their clusters would cost. hclust always makes the <b>cheapest</b> merge next.</p>`;
+      if (H.pair) {
+        const p = H.pair, ca = centroidZ(p.A.m), cb = centroidZ(p.B.m), na = p.A.m.length, nb = p.B.m.length;
+        const dd = Math.hypot(ca[0] - cb[0], ca[1] - cb[1]), fac = Math.sqrt(2 * na * nb / (na + nb));
+        const nm = c => '{' + c.m.map(l => '#' + (HAND[l] + 1)).join(', ') + '}';
+        h += `<div class="calc">A = <b>${nm(p.A)}</b>, n<sub>A</sub> = ${na}, centre (${f2(ca[0])}, ${f2(ca[1])})<br>
+          B = <b>${nm(p.B)}</b>, n<sub>B</sub> = ${nb}, centre (${f2(cb[0])}, ${f2(cb[1])})<br>
+          distance between centres ‖z̄<sub>A</sub> − z̄<sub>B</sub>‖ = <b>${f2(dd)}</b><br>
+          size factor √(2·${na}·${nb} / ${na + nb}) = <b>${fac.toFixed(2)}</b><br>
+          h = ${fac.toFixed(2)} × ${f2(dd)} = <span class="big">${p.cost.toFixed(2)}</span></div>`;
+        if (p.ok) h += `<p class="verdict-ok">✓ Cheapest of the ${H.cl.length * (H.cl.length - 1) / 2} possible pairs.</p><div class="row"><button class="btn primary" data-act="merge">Merge them</button><button class="btn ghost sm" data-act="clear">Pick again</button></div>`;
+        else {
+          const b = p.best, nm2 = c => '{' + c.m.map(l => '#' + (HAND[l] + 1)).join(', ') + '}';
+          h += `<p class="verdict-no">Not yet. ${nm2(H.cl[b.a])} + ${nm2(H.cl[b.b])} is cheaper (h = ${b.cost.toFixed(2)}).</p>
+            <div class="row"><button class="btn sm" data-act="showbest">Show me that pair</button><button class="btn ghost sm" data-act="clear">Pick again</button></div>`;
+        }
+      } else if (H.sel != null) {
+        h += `<div class="calc">Selected: <b>{${H.cl[H.sel].m.map(l => '#' + (HAND[l] + 1)).join(', ')}}</b>. Now click a second star.</div>`;
+      }
+      h += `<div class="row"><button class="btn ghost sm" data-act="hint" ${S.busy ? 'disabled' : ''}>Hint</button>
+        <button class="btn ghost sm" data-act="auto" ${S.busy ? 'disabled' : ''}>${H.done < 3 ? 'Skip: let hclust finish' : 'Let hclust finish'}</button></div>`;
+      if (H.done > 0 && H.done < 3) h += `<p class="note" style="margin-top:10px">Notice: once a cluster has 2 or more cities, Ward measures from its centre (the +) and charges more for bigger clusters.</p>`;
+    } else {
+      h += `<p>That is exactly <b>hclust(dist(hand), method="ward.D2")</b>. R’s <b>$height</b> lists the same 9 merge costs, in order:</p>
+        <div class="calc">${T_HAND.height.map(v => v.toFixed(2)).join('  ')}</div>
+        <p>Low merges are near neighbours; the tall ones join groups that are far apart. The tree keeps every level, so you choose the number of clusters later.</p>
+        <div class="row"><button class="btn primary" data-act="go-all">Now all 60 cities →</button></div>`;
+    }
+  } else if (st === 'all') {
+    h = kick('Step 3 · All 60 cities') + `<h3>Same rule, 59 merges</h3>
+      <p>The distances now use <b>all 16 scaled columns</b>, so no flat picture shows them exactly. Choose a 2-D map to watch:</p>
+      <div class="chips">${Object.entries(MAPS).map(([k, m]) => `<button class="chip ${S.map === k ? 'on' : ''}" data-act="map" data-m="${k}">${m.name}</button>`).join('')}</div>
+      <p class="note">The PCA map is the best 2-D shadow of all 16 columns; the PCA explainer shows how it is made.</p>`;
+    if (!S.ran) h += `<div class="row"><button class="btn primary" data-act="run" ${S.busy ? 'disabled' : ''}>Run hclust on 60 cities</button>${S.busy ? '<button class="btn ghost sm" data-act="skip">Skip to the end</button>' : ''}</div>`;
+    else h += `<p>Small merges join near twins; the last few join whole regions. Every city is now in one tree.</p>
+      <div class="row"><button class="btn primary" data-act="go-cut">Cut the tree →</button><button class="btn ghost sm" data-act="rerun">Replay</button></div>`;
+  } else if (st === 'cut') {
+    h = kick('Step 4 · Cut') + `<h3>Slice it into clusters</h3>
+      <p>Drag the laser on the dendrogram. Every branch it crosses becomes one cluster: <b>cutree(clusterpollution2, k)</b>.</p>` + clusterPanel(T_SC) +
+      `<div class="row"><button class="btn primary" data-act="go-scale">What if we skip scale()? →</button></div>`;
+  } else if (st === 'scale') {
+    h = kick('Step 5 · Scale') + `<h3>${S.raw ? 'Without scale(), DENS decides' : 'Forget scale()'}</h3>
+      <div class="toggle"><button class="${!S.raw ? 'on' : ''}" data-act="raw" data-v="0">scale() on</button><button class="${S.raw ? 'on' : ''}" data-act="raw" data-v="1">scale() off</button></div>`;
+    if (!S.raw) h += `<p>This is the script’s scaled result on DENS × MORT. The four clusters overlap here because they were formed from all 16 columns, not just these two.</p><p><b>Switch scale() off</b> to see what the script got first.</p>`;
+    else {
+      const g = U.cutree(T_RAW, S.k);
+      const bands = range(S.k).map(k => { const v = range(N).filter(i => g[i] === k + 1).map(i => P.rows[i][iD]); return { c: k, lo: Math.min(...v), hi: Math.max(...v) }; }).sort((a, b) => a.lo - b.lo);
+      h += `<p>DENS is in thousands; every other column is in tens or hundreds. Squared distance is a sum over columns, so the column with the biggest spread controls it:</p>
+        <div class="lbl">Share of the squared distance, raw data</div>
+        <div class="bars">${VARSHARE_RAW.map((v, j) => [v, j]).sort((a, b) => b[0] - a[0]).slice(0, 4).map(([v, j]) => `<div class="bar"><span>${SHORT[j]}</span><div><i style="width:${(v * 100).toFixed(1)}%;background:${j === iD ? '#ff6fa8' : '#6ee7ff'}"></i></div><b>${(v * 100).toFixed(1)}%</b></div>`).join('')}</div>
+        <p>So the ${S.k} raw clusters are just ${S.k} bands of density, with no overlap:</p>
+        <div class="sizes">${bands.map(b => `<span style="color:${PAL[b.c % PAL.length]}">DENS ${b.lo}–${b.hi}</span>`).join('')}</div>
+        <div class="toggle"><button class="${S.prop === 'true' ? 'on' : ''}" data-act="prop" data-v="true">True proportions</button><button class="${S.prop === 'stretch' ? 'on' : ''}" data-act="prop" data-v="stretch">Stretched like plot()</button></div>
+        <p class="note">${S.prop === 'true' ? 'With both axes on the same scale, as dist() sees them, the cities lie on a thin line: MORT barely moves the distance.' : 'R’s plot() stretches each axis to fit, which hides the problem. The colours still split only left to right.'}</p>
+        <p>Scaling gives every column an equal 1/16 share. That is why the script scales before clustering.</p>
+        <div class="row"><a class="btn primary" href="../pca/">Next: PCA by hand →</a></div>`;
+    }
+  }
+  $('#ctrl').innerHTML = h;
+}
+function clusterPanel(T) {
+  const g = U.cutree(T, S.k), K = S.k, sizes = [], mort = [];
+  for (let c = 1; c <= K; c++) { const m = range(N).filter(i => g[i] === c); sizes.push(m.length); mort.push(m.reduce((s, i) => s + P.rows[i][iM], 0) / m.length); }
+  const mmin = Math.min(...mort) - 40, mmax = Math.max(...mort);
+  let h = `<div class="kbig"><button class="btn sm" data-act="k" data-d="-1" ${S.k <= 1 ? 'disabled' : ''} aria-label="fewer clusters">−</button><b>${K}</b><button class="btn sm" data-act="k" data-d="1" ${S.k >= 10 ? 'disabled' : ''} aria-label="more clusters">+</button><span>clusters${K === 4 ? ' · the script uses k = 4' : ''}</span></div>
+    <div class="sizes">${sizes.map((n, c) => `<span style="color:${PAL[c % PAL.length]}">${c + 1}: ${n} cities</span>`).join('')}</div>`;
+  if (K > 1) {
+    h += `<div class="lbl">Mean mortality per cluster · tapply(MORT, groups, mean)</div><div class="bars">${mort.map((v, c) =>
+      `<div class="bar"><span style="color:${PAL[c % PAL.length]}">cluster ${c + 1}</span><div><i style="width:${((v - mmin) / (mmax - mmin) * 100).toFixed(1)}%;background:${PAL[c % PAL.length]}"></i></div><b>${v.toFixed(1)}</b></div>`).join('')}</div>`;
+    h += `<div class="lbl">Cluster centres (mean scaled value)</div><div class="heat" style="grid-template-columns:auto repeat(${K},minmax(38px,1fr))"><div></div>${range(K).map(c => `<div style="color:${PAL[c % PAL.length]}">${c + 1}</div>`).join('')}`;
+    P.cols.forEach((_, j) => {
+      h += `<div class="hn">${SHORT[j]}</div>`;
+      for (let c = 1; c <= K; c++) {
+        const m = range(N).filter(i => g[i] === c), v = m.reduce((s, i) => s + Z[i][j], 0) / m.length, a = clamp(Math.abs(v) / 1.6, 0, 1);
+        h += `<div style="background:${v > 0 ? `rgba(255,111,168,${(a * .75).toFixed(2)})` : `rgba(91,140,255,${(a * .75).toFixed(2)})`};color:${a > .55 ? '#fff' : '#c9d0f5'}">${v.toFixed(1)}</div>`;
+      }
+    });
+    h += `</div><p class="note">Pink = above average, blue = below. Read down a column to describe a cluster.</p>`;
+  }
+  return h;
+}
+$('#ctrl').addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const a = b.dataset.act;
+  if (a === 'go-merge') { Sound.unlock(); setStage('merge'); }
+  else if (a === 'merge') doMerge();
+  else if (a === 'clear') { S.hand.pair = null; S.hand.sel = null; Sound.ui(); renderCtrl(); }
+  else if (a === 'showbest') { const bb = S.hand.pair.best, H = S.hand; H.pair = { A: H.cl[bb.a], B: H.cl[bb.b], cost: bb.cost, ok: true, best: bb }; Sound.select(); renderCtrl(); }
+  else if (a === 'hint') { const bb = cheapest(); S.hand.pair = null; S.hand.sel = bb.a; Sound.select(); renderCtrl(); flashHint(bb); }
+  else if (a === 'auto') autoFinish();
+  else if (a === 'go-all') setStage('all');
+  else if (a === 'map') { S.map = b.dataset.m; $('#skyLab').textContent = 'Sky · ' + MAPS[S.map].name; Sound.ui(); renderCtrl(); }
+  else if (a === 'run') runAll();
+  else if (a === 'skip') S.skip = true;
+  else if (a === 'rerun') { S.ran = false; runAll(); }
+  else if (a === 'go-cut') { setStage('cut'); await sweepCut(4); Code.focus(['cutree', 'tapply']); }
+  else if (a === 'k') { S.k = clamp(S.k + +b.dataset.d, 1, 10); S.cutH = U.cutHeight(tree(), S.k); Sound.tick(S.k); drawDendro(); renderCtrl(); renderTable(); }
+  else if (a === 'go-scale') setStage('scale');
+  else if (a === 'raw') {
+    const raw = b.dataset.v === '1'; if (raw === S.raw) return;
+    S.raw = raw; S.prop = 'true'; S.cutH = U.cutHeight(tree(), S.k);
+    raw ? Sound.verdict(false) : Sound.complete();
+    Code.focus(raw ? ['raw', 'rawplot'] : ['plotdm']);
+    renderCtrl(); renderTable(); regrowAll();
+  }
+  else if (a === 'prop') { S.prop = b.dataset.v; Sound.ui(); renderCtrl(); }
+});
+function flashHint(bb) {
+  const H = S.hand, m = H.cl[bb.a].m.concat(H.cl[bb.b].m).map(l => HAND[l]);
+  m.forEach(i => S.flashes.push({ x: disp[i].x, y: disp[i].y, col: '#4dffb4', t0: performance.now() }));
+}
+function regrowAll() {                      // redraw the whole dendrogram with each merge drawing in turn
+  drawDendro();
+  svg.querySelectorAll('.seg').forEach((p, s) => { p.classList.add('new'); p.style.animationDelay = (s * 14) + 'ms'; });
+}
+
+/* ---------------- boot ---------------- */
+Sound.bindButtons({ music: '#musicBtn', sfx: '#soundBtn' });
+$('#resetBtn').addEventListener('click', () => location.reload());
+new ResizeObserver(() => { layoutDuo(); resize(); }).observe($('#stageB'));
+// deep links (#merge, #all, #cut, #scale) jump straight to a step with the earlier steps completed
+function jump(st) {
+  const k = ORDER.indexOf(st); if (k < 1) return false;
+  initHand();
+  if (k > 1) {
+    T_HAND.steps.forEach(() => { const b = cheapest(), H = S.hand; H.pair = { A: H.cl[b.a], B: H.cl[b.b], cost: b.cost, ok: true, best: b }; doMerge(); });
+    S.runT = N - 1; S.ran = true;
+  }
+  S.reached = k; setStage(st);
+  if (st === 'cut') { S.k = 4; S.cutH = U.cutHeight(tree(), 4); drawDendro(); renderCtrl(); renderTable(); }
+  return true;
+}
+if (!jump(location.hash.slice(1))) setStage('data');
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

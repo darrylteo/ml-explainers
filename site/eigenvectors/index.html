@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eigenvectors by Hand</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+.top{display:flex;align-items:center;gap:20px;padding:14px 20px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:22px;letter-spacing:-.02em}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.steps{display:flex;gap:6px;list-style:none;margin:0 0 0 auto;padding:0;flex-wrap:wrap;counter-reset:s}
+.steps li{font:600 12px var(--sans);padding:6px 11px;border-radius:99px;border:1px solid var(--line);color:var(--muted);display:flex;align-items:center;gap:6px}
+.steps li::before{content:counter(s);counter-increment:s;font:700 10px var(--mono);width:17px;height:17px;border-radius:50%;display:grid;place-items:center}
+.steps li.reach{cursor:pointer}
+.steps li.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.steps li.active::before{background:var(--accent);color:var(--on-accent)}
+.steps li.done{color:var(--ink)}
+.steps li.done::before{content:"✓";background:var(--pass)}
+.layout{display:grid;grid-template-columns:minmax(330px,440px) minmax(0,1fr);grid-template-areas:"ctrl stage" "mat stage" "code stage";grid-template-rows:auto auto 1fr;gap:14px;padding:0 20px 20px;align-items:start}
+.card{border-radius:16px;min-width:0}
+#ctrl{grid-area:ctrl;padding:16px}
+#mat{grid-area:mat;padding:14px 16px}
+#code{grid-area:code}
+.stage{grid-area:stage;position:sticky;top:14px;display:flex;flex-direction:column;height:calc(100vh - 96px);min-height:600px;overflow:hidden}
+@media (max-width:900px){
+  .top{padding:12px 16px}
+  .steps{margin-left:0}
+  .layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"stage" "ctrl" "mat" "code";padding:0 16px 16px}
+  .stage{position:relative;top:0;height:74vh;min-height:500px}
+}
+.kicker{font:700 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+#ctrl h3{margin:0 0 6px;font-size:20px;letter-spacing:-.01em}
+#ctrl p{margin:0 0 12px;color:var(--muted);font-size:15px;line-height:1.5}
+#ctrl p b{color:var(--ink)}
+.btn{font:600 14px var(--sans);border:1px solid var(--line-strong);padding:9px 14px;border-radius:10px;cursor:pointer}
+.btn:hover:not(:disabled){transform:translateY(-1px)}
+.btn.ghost{background:transparent}
+.btn.sm{font-size:12.5px;padding:6px 10px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+a.btn{text-decoration:none;display:inline-block}
+.back{font:600 12px var(--sans);text-decoration:none}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.found{color:var(--pass);font:600 15px var(--sans);margin:0 0 10px}
+.note{font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+.callout{border:1px solid rgba(255,196,107,.35);background:rgba(255,196,107,.07);border-radius:12px;padding:10px 12px;margin:0 0 12px;font-size:14px;line-height:1.5;color:#ffe2b0}
+.callout b{color:#fff}
+.lbl{font:700 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:4px 0 8px}
+.matrix{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.mx{display:grid;grid-template-columns:auto auto;gap:6px 18px;padding:8px 16px;border-left:2px solid var(--line-strong);border-right:2px solid var(--line-strong);border-radius:8px;font:700 17px var(--mono)}
+.mx span{text-align:right}
+.mx small{display:block;font:500 10.5px var(--sans);color:var(--muted);text-align:right}
+.eig{display:grid;gap:6px;margin-top:12px}
+.eig div{display:flex;justify-content:space-between;gap:10px;font:600 13px var(--mono);padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.03)}
+.eig div.on{border-color:currentColor}
+.hist{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 12px}
+.hist span{font:700 12px var(--mono);padding:3px 8px;border-radius:7px;background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.hist span.ok{color:var(--pass);border-color:rgba(77,255,180,.4)}
+.stage-h{padding:14px 18px 10px;border-bottom:1px solid var(--line)}
+.stage-h h2{margin:0;font-size:17px;letter-spacing:-.01em}
+.stage-h p{margin:3px 0 0;font-size:13.5px;color:var(--muted)}
+.stage-b{position:relative;flex:1;min-height:0}
+#intro,#cv{position:absolute;inset:0;width:100%;height:100%;transition:opacity .5s}
+.hide{opacity:0;pointer-events:none}
+#intro{display:flex;flex-direction:column;justify-content:center;padding:24px;gap:16px;overflow:auto}
+.intro-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.icard{border:1px solid var(--line);border-radius:14px;padding:16px}
+.icard .num{font:700 13px var(--mono);width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);margin-bottom:10px}
+.icard h3{margin:0 0 6px;font-size:16.5px}
+.icard p{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}
+#cv{touch-action:none;cursor:grab}
+#cv.drag{cursor:grabbing}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<link rel="stylesheet" href="../shared/cosmos.css">
+</head>
+<body>
+<div class="cosmos-stars" aria-hidden="true"><i class="s1"></i><i class="s2"></i></div>
+<header class="top">
+  <div class="brand">
+    <a class="back" href="../">← ML Explainers</a>
+    <h1>Eigenvectors <span>by hand</span></h1>
+    <p>Find the arrows a matrix only stretches, and meet PCA’s directions again.</p>
+  </div>
+  <ol class="steps" id="steps">
+    <li>Idea</li><li>Stretch</li><li>Find</li><li>Spread</li><li>Repeat</li>
+  </ol>
+  <button class="btn ghost" id="musicBtn" aria-pressed="true">♫ Music on</button>
+  <button class="btn ghost" id="soundBtn" aria-pressed="true">Sound on</button>
+  <button class="btn ghost" id="resetBtn">Restart</button>
+</header>
+
+<main class="layout">
+  <section class="card" id="ctrl"></section>
+  <section class="card" id="mat"></section>
+  <section class="card code" id="code"></section>
+  <section class="card stage">
+    <div class="stage-h"><h2 id="stTitle"></h2><p id="stSub"></p></div>
+    <div class="stage-b" id="stageB">
+      <div id="intro">
+        <div class="intro-grid">
+          <div class="icard"><div class="num">1</div><h3>A matrix moves arrows</h3><p>Multiply an arrow by a 2 × 2 matrix and you get a new arrow: usually turned and stretched.</p></div>
+          <div class="icard"><div class="num">2</div><h3>Some arrows don’t turn</h3><p>A few special directions come out pointing the same way, only longer or shorter. Those are <b>eigenvectors</b>.</p></div>
+          <div class="icard"><div class="num">3</div><h3>The stretch is the eigenvalue</h3><p>How much an eigenvector is stretched is its <b>eigenvalue</b>. For a spread matrix it is the spread of the shadows: PCA again.</p></div>
+        </div>
+        <div class="mathgrid">
+          <div class="mcard"><div class="mlab">An eigenvector only gets stretched</div><div data-tex="\tip{A}{A}\,\tip{v}{\vec{v}} = \tip{lam}{\lambda}\,\tip{v}{\vec{v}}" data-plain="A·v = λ·v"></div></div>
+          <div class="mcard"><div class="mlab">The spread matrix of the 10 cities</div><div data-tex="\tip{A}{A} = \frac{1}{\tip{n}{n}-1}\,\tip{Xt}{X^{\top}}\tip{X}{X}" data-plain="A = Xᵀ X / (n − 1)"></div></div>
+          <div class="mcard wide"><div class="mlab">Spread of the shadows on a unit arrow</div><div data-tex="\text{spread along } \tip{v}{\vec{v}} = \tip{vt}{\vec{v}^{\top}}\,\tip{A}{A}\,\tip{v}{\vec{v}}, \qquad \text{largest when } \tip{v}{\vec{v}} \text{ is the top eigenvector, where it equals } \tip{lam1}{\lambda_1}" data-plain="spread along v = vᵀ A v; largest at the top eigenvector, where it equals λ₁"></div></div>
+        </div>
+        <p class="mhint"><b>Hover or tap any symbol</b> to see what it means.</p>
+      </div>
+      <canvas id="cv" class="hide"></canvas>
+    </div>
+  </section>
+</main>
+
+<script>window.MATH_TIPS = {
+ A: { name: 'Spread matrix A', def: 'The covariance matrix of the 10 cities on EDUC and WWDRK. Diagonal: how spread out each column is. Off-diagonal: how much the two move together.' },
+ v: { name: 'Arrow v', def: 'Any direction, one unit long. In PCA it is a candidate screen direction.' },
+ vt: { name: 'v transposed', def: 'The same arrow written as a row, so vᵀ A v is a single number.' },
+ lam: { name: 'Eigenvalue λ', def: 'The stretch factor: A·v is λ times as long as v and points the same way.' },
+ lam1: { name: 'Top eigenvalue λ₁', def: 'The biggest stretch. It equals the spread of the shadows on PC1.' },
+ n: { name: 'Number of cities n', def: 'The 10 cities from the PCA explainer.', val: 'n = 10' },
+ X: { name: 'Data X', def: 'The 10 cities × 2 columns, scaled and centred: one row per planet.' },
+ Xt: { name: 'X transposed', def: 'X turned on its side, so XᵀX adds up the products of the columns.' },
+};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="../shared/math.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/fx.js"></script>
+<script src="../shared/code.js"></script>
+<script src="../shared/pollution.js"></script>
+<script src="../shared/unsup.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const pct = v => (v * 100).toFixed(1) + '%';
+const TAU = Math.PI * 2, DEG = 180 / Math.PI;
+
+/* ---------------- the spread matrix of the same 10 cities as the PCA explainer ---------------- */
+const P = window.POLLUTION, U = window.Unsup;
+const Z = U.scale(P.rows).X, iE = P.cols.indexOf('EDUCReal'), iW = P.cols.indexOf('WWDRKReal');
+const HAND = P.hand.map(r => r - 1);
+const PH = U.prcomp(HAND.map(i => [Z[i][iE], Z[i][iW]]), P.rSigns.hand);
+const HC = HAND.map(i => [Z[i][iE] - PH.center[0], Z[i][iW] - PH.center[1]]);
+const A = PH.cov;                                         // cov(hand)
+const LAM = PH.sdev.map(s => s * s);                      // eigen(cov(hand))$values
+const EV = [0, 1].map(k => [PH.rotation[0][k], PH.rotation[1][k]]);
+const EANG = EV.map(v => ((Math.atan2(v[1], v[0]) % Math.PI) + Math.PI) % Math.PI);
+const Av = v => [A[0][0] * v[0] + A[0][1] * v[1], A[1][0] * v[0] + A[1][1] * v[1]];
+const quad = v => { const a = Av(v); return v[0] * a[0] + v[1] * a[1]; };
+const C1 = '#4dffb4', C2 = '#a78bfa', CV = '#6ee7ff', CA = '#ff6fa8';
+
+const ORDER = ['data', 'stretch', 'find', 'spread', 'repeat'];
+const S = { stage: 'data', reached: 0, busy: false, morph: 0, morphTo: 0, phi: 70 / DEG, found: [false, false], spreadPhi: 120 / DEG, pv: 160 / DEG, hist: [], push: null };
+
+Code.mount('#code', {
+  R: [
+    ['m', 'hand <- pollution_scaled[c(1,5,9,16,24,28,33,41,49,59), c("EDUCReal","WWDRKReal")]'],
+    ['m', 'A <- cov(hand)                 # the spread matrix'],
+    ['e', 'e <- eigen(A)'],
+    ['e', 'e$vectors                      # the directions that only stretch'],
+    ['e', 'e$values                       # how much they stretch'],
+    ['p', 'prcomp(hand)$sdev^2            # the same numbers: PCA\'s spreads'],
+    ['r', 'v <- c(1, 0); for (i in 1:10) { v <- A %*% v; v <- v / sqrt(sum(v^2)) }   # power iteration'],
+  ],
+  Python: [
+    ['m', 'hand = pollution_scaled.iloc[[0,4,8,15,23,27,32,40,48,58]][["EDUCReal","WWDRKReal"]]'],
+    ['m', 'A = hand.cov().to_numpy()       # the spread matrix'],
+    ['e', 'import numpy as np'],
+    ['e', 'values, vectors = np.linalg.eigh(A)   # eigh: for symmetric matrices, smallest first'],
+    ['p', 'PCA().fit(hand).explained_variance_   # the same numbers'],
+    ['r', 'v = np.array([1.0, 0.0])'],
+    ['r', 'for _ in range(10): v = A @ v; v /= np.linalg.norm(v)    # power iteration'],
+  ],
+}, { collapsed: true });
+
+/* ---------------- canvas ---------------- */
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1, G = null;
+function resize() {
+  const r = cv.getBoundingClientRect(); DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = Math.max(10, r.width); H = Math.max(10, r.height);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+}
+function geom() {
+  const cx = W / 2, cy = H / 2 + 10, s = Math.min(W, H) * .36 / Math.max(1, LAM[0]);
+  return { cx, cy, s, X: x => cx + x * s, Y: y => cy - y * s };
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function label(text, x, y, colr, align = 'left') {
+  ctx.font = '700 12.5px JetBrains Mono, monospace'; const w = ctx.measureText(text).width + 12;
+  const x0 = clamp(align === 'left' ? x : align === 'right' ? x - w : x - w / 2, 4, W - w - 4);
+  ctx.fillStyle = 'rgba(6,8,22,.88)'; roundRect(x0, y - 11, w, 22, 6); ctx.fill();
+  ctx.fillStyle = colr; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(text, x0 + 6, y + 1);
+}
+function arrow(x0, y0, x1, y1, col, w = 2.6, a = 1) {
+  const ang = Math.atan2(y1 - y0, x1 - x0), len = Math.hypot(x1 - x0, y1 - y0), hl = Math.min(13, len * .4);
+  ctx.save(); ctx.globalAlpha = a; ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = col; ctx.lineCap = 'round';
+  [[w * 4, .12], [w * 2, .3], [w, 1]].forEach(([lw, al]) => { ctx.globalAlpha = al * a; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1 - Math.cos(ang) * hl * .6, y1 - Math.sin(ang) * hl * .6); ctx.stroke(); });
+  ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 - hl * Math.cos(ang - .42), y1 - hl * Math.sin(ang - .42)); ctx.lineTo(x1 - hl * Math.cos(ang + .42), y1 - hl * Math.sin(ang + .42)); ctx.fill();
+  ctx.restore();
+}
+function line(g, ang, col, a, w = 1.6) {
+  const c = Math.cos(ang), s = Math.sin(ang), L = Math.max(W, H);
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = col; ctx.globalAlpha = a;
+  [[w * 5, .1], [w, 1]].forEach(([lw, al]) => { ctx.globalAlpha = al * a; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(g.cx - c * L, g.cy + s * L); ctx.lineTo(g.cx + c * L, g.cy - s * L); ctx.stroke(); });
+  ctx.restore();
+}
+function grid(g, t) {                       // the plane's grid, carried along by the matrix as t goes 0 → 1
+  const M = [[lerp(1, A[0][0], t), lerp(0, A[0][1], t)], [lerp(0, A[1][0], t), lerp(1, A[1][1], t)]];
+  const T = (x, y) => [M[0][0] * x + M[0][1] * y, M[1][0] * x + M[1][1] * y];
+  ctx.strokeStyle = 'rgba(110,231,255,.09)'; ctx.lineWidth = 1;
+  for (let k = -6; k <= 6; k++) {
+    for (const vert of [true, false]) {
+      ctx.beginPath();
+      for (let j = 0; j <= 24; j++) { const u = -6 + j / 2, [x, y] = vert ? T(k / 2, u / 2) : T(u / 2, k / 2); j ? ctx.lineTo(g.X(x), g.Y(y)) : ctx.moveTo(g.X(x), g.Y(y)); }
+      ctx.stroke();
+    }
+  }
+}
+function circleAndEllipse(g, showEllipse) {
+  ctx.strokeStyle = 'rgba(200,210,255,.25)'; ctx.setLineDash([4, 6]); ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(g.cx, g.cy, g.s, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  if (!showEllipse) return;
+  ctx.strokeStyle = 'rgba(255,111,168,.35)'; ctx.lineWidth = 1.4; ctx.beginPath();
+  for (let k = 0; k <= 120; k++) { const t = k / 120 * TAU, p = Av([Math.cos(t), Math.sin(t)]); k ? ctx.lineTo(g.X(p[0]), g.Y(p[1])) : ctx.moveTo(g.X(p[0]), g.Y(p[1])); }
+  ctx.stroke();
+}
+const turnOf = v => { const a = Av(v); let d = Math.atan2(a[1], a[0]) - Math.atan2(v[1], v[0]); while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
+
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (!W || cv.classList.contains('hide')) return;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, W, H);
+  const g = G = geom();
+  if (S.stage === 'stretch') drawStretch(g, t);
+  else if (S.stage === 'find') drawFind(g, t);
+  else if (S.stage === 'spread') drawSpread(g, t);
+  else if (S.stage === 'repeat') drawRepeat(g, t);
+}
+function drawStretch(g, t) {
+  S.morph = lerp(S.morph, S.morphTo, .06);
+  grid(g, S.morph); circleAndEllipse(g, false);
+  for (let k = 0; k < 24; k++) {
+    const a = k / 24 * TAU, v = [Math.cos(a), Math.sin(a)], w = Av(v), p = [lerp(v[0], w[0], S.morph), lerp(v[1], w[1], S.morph)];
+    arrow(g.cx, g.cy, g.X(p[0]), g.Y(p[1]), `hsl(${k * 15},90%,68%)`, 1.8, .9);
+  }
+  label(S.morphTo ? 'after A: the circle became an ellipse' : 'before A: 24 arrows of length 1', 14, 22, '#c9d0f5');
+}
+function drawFind(g, t) {
+  grid(g, 0); circleAndEllipse(g, true);
+  S.found.forEach((f, k) => { if (f) { line(g, EANG[k], k ? C2 : C1, .8); } });
+  const v = [Math.cos(S.phi), Math.sin(S.phi)], w = Av(v), turn = turnOf(v) * DEG;
+  // the arc showing how far A turned the arrow
+  const a0 = -Math.atan2(v[1], v[0]), a1 = -Math.atan2(w[1], w[0]);
+  ctx.strokeStyle = Math.abs(turn) < 1 ? C1 : '#ffc46b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(g.cx, g.cy, g.s * .45, a0, a1, turn > 0); ctx.stroke();
+  arrow(g.cx, g.cy, g.X(w[0]), g.Y(w[1]), CA, 3);
+  arrow(g.cx, g.cy, g.X(v[0]), g.Y(v[1]), CV, 3);
+  FX.ball(ctx, null, { x: g.X(v[0]), y: g.Y(v[1]), r: 8 }, CV, { glow: true });
+  label('v', g.X(v[0]) + 12, g.Y(v[1]) - 14, CV); label('A·v', g.X(w[0]) + 12, g.Y(w[1]) + 14, CA);
+  label(`A turned v by ${Math.abs(turn).toFixed(1)}°`, 14, 22, Math.abs(turn) < 1 ? C1 : '#ffe2b0');
+  label(`and stretched it × ${Math.hypot(...w).toFixed(2)}`, 14, 50, '#c9d0f5');
+}
+function drawSpread(g, t) {
+  grid(g, 0);
+  // the "spread flower": how spread out the shadows are along each direction
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  ctx.beginPath();
+  for (let k = 0; k <= 180; k++) { const a = k / 180 * TAU, r = quad([Math.cos(a), Math.sin(a)]); k ? ctx.lineTo(g.X(r * Math.cos(a)), g.Y(r * Math.sin(a))) : ctx.moveTo(g.X(r * Math.cos(a)), g.Y(r * Math.sin(a))); }
+  ctx.closePath(); ctx.fillStyle = 'rgba(255,196,107,.08)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,196,107,.7)'; ctx.lineWidth = 1.6; ctx.stroke(); ctx.restore();
+  line(g, EANG[0], C1, .7); line(g, EANG[1], C2, .5);
+  label(`PC1 · λ₁ = ${LAM[0].toFixed(2)}`, g.X(EV[0][0] * LAM[0] * 1.05) + 8, g.Y(EV[0][1] * LAM[0] * 1.05), C1);
+  // planets and their shadows on the arrow's line
+  const v = [Math.cos(S.spreadPhi), Math.sin(S.spreadPhi)];
+  line(g, S.spreadPhi, CV, .9, 2);
+  HC.forEach(([x, y]) => {
+    const z = x * v[0] + y * v[1];
+    ctx.strokeStyle = 'rgba(255,111,168,.45)'; ctx.setLineDash([3, 4]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(g.X(x), g.Y(y)); ctx.lineTo(g.X(z * v[0]), g.Y(z * v[1])); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = CV; ctx.beginPath(); ctx.arc(g.X(z * v[0]), g.Y(z * v[1]), 2.8, 0, TAU); ctx.fill();
+    const gr = ctx.createRadialGradient(g.X(x) - 2, g.Y(y) - 2, 1, g.X(x), g.Y(y), 7);
+    gr.addColorStop(0, '#fff'); gr.addColorStop(.4, '#bcd0ff'); gr.addColorStop(1, '#2a3577');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(g.X(x), g.Y(y), 7, 0, TAU); ctx.fill();
+  });
+  const q = quad(v);
+  FX.ball(ctx, null, { x: g.X(q * v[0]), y: g.Y(q * v[1]), r: 6 }, '#ffc46b', { glow: true });
+  label(`spread along this line = ${q.toFixed(2)}`, 14, 22, '#ffe2b0');
+  label(`biggest possible = λ₁ = ${LAM[0].toFixed(2)}`, 14, 50, C1);
+}
+function drawRepeat(g, t) {
+  grid(g, 0); circleAndEllipse(g, true);
+  line(g, EANG[0], C1, .45);
+  const v = [Math.cos(S.pv), Math.sin(S.pv)];
+  if (S.push) {
+    const u = clamp((t - S.push.t0) / 900, 0, 1), w = Av(S.push.from);
+    if (u < .5) { const k = ease(u * 2); arrow(g.cx, g.cy, g.X(lerp(S.push.from[0], w[0], k)), g.Y(lerp(S.push.from[1], w[1], k)), CA, 3); }
+    else { const k = ease((u - .5) * 2), n = Math.hypot(...w), d = [w[0] / n, w[1] / n]; arrow(g.cx, g.cy, g.X(lerp(w[0], d[0], k)), g.Y(lerp(w[1], d[1], k)), CA, 3); }
+    if (u >= 1) S.push = null;
+  }
+  arrow(g.cx, g.cy, g.X(v[0]), g.Y(v[1]), CV, 3);
+  const off = Math.abs(((S.pv - EANG[0] + Math.PI / 2) % Math.PI + Math.PI) % Math.PI - Math.PI / 2) * DEG;
+  label(`${off.toFixed(off < 1 ? 2 : 1)}° away from PC1`, 14, 22, off < 1 ? C1 : '#ffe2b0');
+}
+
+/* ---------------- pointer ---------------- */
+let dragging = false;
+const angleAt = e => { const r = cv.getBoundingClientRect(); return Math.atan2(-(e.clientY - r.top - G.cy), e.clientX - r.left - G.cx); };
+function setPhi(a) {
+  S.phi = a;
+  const v = [Math.cos(a), Math.sin(a)];
+  if (Math.abs(turnOf(v)) * DEG < 1) {
+    const k = [0, 1].reduce((b, j) => Math.abs(Math.cos(a - EANG[j])) > Math.abs(Math.cos(a - EANG[b])) ? j : b, 0);
+    if (!S.found[k]) { S.found[k] = true; S.phi = Math.cos(a - EANG[k]) > 0 ? EANG[k] : EANG[k] + Math.PI; Sound.verdict(true); dragging = false; cv.classList.remove('drag'); renderAll(); return; }
+  }
+  renderSoon();
+}
+cv.addEventListener('pointerdown', e => {
+  if (!G || S.busy) return;
+  if (S.stage === 'find' || S.stage === 'spread') { dragging = true; cv.classList.add('drag'); cv.setPointerCapture(e.pointerId); move(e); }
+});
+function move(e) { if (S.stage === 'find') setPhi(angleAt(e)); else if (S.stage === 'spread') { S.spreadPhi = angleAt(e); renderSoon(); } }
+cv.addEventListener('pointermove', e => { if (dragging) move(e); });
+const end = () => { dragging = false; cv.classList.remove('drag'); };
+cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+let rT = 0; function renderSoon() { if (!rT) rT = setTimeout(() => { rT = 0; renderCtrl(); }, 120); }
+
+/* ---------------- panels ---------------- */
+const TITLES = {
+  data:    ['What is an eigenvector?', 'Three ideas. Start in the panel on the left.'],
+  stretch: ['A matrix moves every arrow', 'Each coloured arrow is multiplied by the spread matrix A.'],
+  find:    ['Hunt for arrows that don’t turn', 'Drag anywhere to point v. The pink arrow is A·v.'],
+  spread:  ['The stretch is the spread', 'Drag to point a line. The gold curve shows the shadows’ spread in every direction.'],
+  repeat:  ['Push, push, push', 'Multiply by A again and again, and any arrow swings to PC1.'],
+};
+function setStage(st) {
+  S.stage = st; S.reached = Math.max(S.reached, ORDER.indexOf(st));
+  Sound.mood(st === 'data' ? 'intro' : st === 'repeat' ? 'forest' : 'build');
+  const k = ORDER.indexOf(st);
+  document.querySelectorAll('#steps li').forEach((li, i) => { li.classList.toggle('active', i === k); li.classList.toggle('done', i !== k && i <= S.reached); li.classList.toggle('reach', i <= S.reached && i !== k); });
+  $('#stTitle').textContent = TITLES[st][0]; $('#stSub').textContent = TITLES[st][1];
+  $('#intro').classList.toggle('hide', st !== 'data'); $('#cv').classList.toggle('hide', st === 'data');
+  Code.focus({ data: ['m'], stretch: ['m'], find: ['e'], spread: ['p'], repeat: ['r'] }[st]);
+  renderAll(); requestAnimationFrame(resize);
+}
+document.querySelectorAll('#steps li').forEach((li, i) => li.addEventListener('click', () => { if (i <= S.reached && !S.busy && ORDER[i] !== S.stage) { Sound.ui(); setStage(ORDER[i]); } }));
+function renderAll() { renderCtrl(); renderMat(); }
+function renderMat() {
+  const f = v => v.toFixed(2);
+  let h = `<div class="lbl">The spread matrix A of the 10 cities</div><div class="matrix"><span style="font:700 22px var(--mono)">A =</span><div class="mx">
+    <span>${f(A[0][0])}<small>EDUC spread</small></span><span>${f(A[0][1])}<small>move together</small></span>
+    <span>${f(A[1][0])}<small>move together</small></span><span>${f(A[1][1])}<small>WWDRK spread</small></span></div></div>`;
+  const show = S.stage === 'spread' || S.stage === 'repeat' || S.found.some(Boolean);
+  if (show) h += `<div class="eig">${[0, 1].map(k => (S.found[k] || S.stage === 'spread' || S.stage === 'repeat')
+    ? `<div class="on" style="color:${k ? C2 : C1}"><span>eigenvector ${k + 1}: (${f(EV[k][0])}, ${f(EV[k][1])})</span><span>λ${k + 1} = ${f(LAM[k])}</span></div>`
+    : `<div style="color:var(--muted)"><span>eigenvector ${k + 1}: not found yet</span><span>λ${k + 1} = ?</span></div>`).join('')}</div>`;
+  $('#mat').innerHTML = h;
+}
+const kick = t => `<div class="kicker">${t}</div>`;
+function renderCtrl() {
+  const st = S.stage; let h = '';
+  if (st === 'data') h = kick('Step 1 · The idea') + `<h3>Arrows that keep their direction</h3>
+      <p>In the PCA explainer you turned a screen until the shadows spread the widest. A computer does not turn screens: it solves one equation, and the answer is an <b>eigenvector</b>.</p>
+      <p>We use the same 10 cities and the same 2 columns. First, meet their <b>spread matrix</b>.</p>
+      <div class="row"><button class="btn primary" data-act="go" data-v="stretch">See what a matrix does →</button></div>`;
+  else if (st === 'stretch') h = kick('Step 2 · Stretch') + `<h3>Every arrow gets turned and stretched</h3>
+      <p>Press the button to multiply all 24 arrows by A. The circle becomes an ellipse, and the grid shears with it.</p>
+      <div class="row"><button class="btn ${S.morphTo ? 'ghost' : 'primary'}" data-act="morph">${S.morphTo ? 'Undo A' : 'Apply A'}</button></div>
+      <p class="note" style="margin-top:12px">Look closely: most arrows change direction, but along the ellipse’s longest and shortest axes they don’t. Those are the arrows we want.</p>
+      <div class="row"><button class="btn primary" data-act="go" data-v="find">Find them →</button></div>`;
+  else if (st === 'find') {
+    const n = S.found.filter(Boolean).length;
+    h = kick('Step 3 · Find') + `<h3>${n === 2 ? 'Both eigenvectors found' : `Find the arrows A doesn’t turn (${n} / 2)`}</h3>`;
+    if (n < 2) h += `<p><b>Drag</b> to point the cyan arrow v. The pink arrow A·v shows where A sends it. When the two point the same way, v is an <b>eigenvector</b>.</p>
+      <div class="callout">The gold arc is how far A turns v. Make it vanish.</div>
+      <div class="row"><button class="btn ghost sm" data-act="hint">Show me one</button></div>`;
+    else h += `<p class="found">✓ λ₁ = ${LAM[0].toFixed(2)} and λ₂ = ${LAM[1].toFixed(2)}</p>
+      <p>The two eigenvectors sit at <b>right angles</b>. That always happens for a spread matrix, because it is symmetric (the two "move together" numbers are equal).</p>
+      <p>Look at their directions: they are exactly <b>PC1</b> and <b>PC2</b> from the PCA explainer.</p>
+      <div class="row"><button class="btn primary" data-act="go" data-v="spread">Why are they the PCs? →</button></div>`;
+  } else if (st === 'spread') {
+    const q = quad([Math.cos(S.spreadPhi), Math.sin(S.spreadPhi)]);
+    h = kick('Step 4 · Spread') + `<h3>The stretch is the spread</h3>
+      <p>The planets are back. For any line, the spread of their shadows is <b>vᵀAv</b>. The gold curve plots it in every direction: it reaches furthest along <b style="color:${C1}">PC1</b>.</p>
+      <div class="callout">Spread along your line: <b>${q.toFixed(2)}</b> of a possible <b>${LAM[0].toFixed(2)}</b>.</div>
+      <p>So the eigenvalue is the spread on that PC: λ₁ / (λ₁ + λ₂) = <b>${pct(LAM[0] / (LAM[0] + LAM[1]))}</b>, the same 89.8% you found by turning the screen.</p>
+      <div class="row"><button class="btn primary" data-act="go" data-v="repeat">How does a computer find it? →</button></div>`;
+  } else if (st === 'repeat') {
+    h = kick('Step 5 · Repeat') + `<h3>Keep pushing</h3>
+      <p>Start with any arrow. Multiply by A, then shrink back to length 1. Each push stretches the PC1 part ${(LAM[0] / LAM[1]).toFixed(1)}× more than the PC2 part, so PC1 quickly takes over.</p>
+      ${S.hist.length ? `<div class="lbl">Degrees away from PC1 after each push</div><div class="hist">${S.hist.map(d => `<span class="${d < 1 ? 'ok' : ''}">${d < 1 ? d.toFixed(2) : d.toFixed(1)}°</span>`).join('')}</div>` : ''}
+      <div class="row"><button class="btn primary" data-act="push" ${S.push ? 'disabled' : ''}>Push once (A·v)</button><button class="btn ghost sm" data-act="new">Start somewhere new</button></div>
+      <p class="note" style="margin-top:12px">This is the <b>power method</b>, the simplest way software finds the top eigenvector. Real PCA code uses faster cousins of it.</p>
+      <div class="row"><a class="btn ghost sm" href="../pca/#spin">← Back to the planets</a><a class="btn ghost sm" href="../">All explainers</a></div>`;
+  }
+  $('#ctrl').innerHTML = h;
+}
+$('#ctrl').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const a = b.dataset.act;
+  if (a === 'go') { Sound.unlock(); setStage(b.dataset.v); }
+  else if (a === 'morph') { S.morphTo = S.morphTo ? 0 : 1; S.morphTo ? Sound.split() : Sound.ui(); renderCtrl(); }
+  else if (a === 'hint' && !S.busy) { const k = S.found[0] ? 1 : 0, from = S.phi, to = EANG[k] + (Math.cos(from - EANG[k]) < 0 ? Math.PI : 0); let d = to - from; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU;
+    S.busy = true; const t0 = performance.now(); const step = now => { const u = clamp((now - t0) / 1200, 0, 1); S.phi = from + d * ease(u); if (u < 1) requestAnimationFrame(step); else { S.busy = false; setPhi(to); } }; requestAnimationFrame(step); }
+  else if (a === 'push' && !S.push) {
+    const v = [Math.cos(S.pv), Math.sin(S.pv)], w = Av(v);
+    S.push = { from: v, t0: performance.now() }; S.pv = Math.atan2(w[1], w[0]);
+    const off = Math.abs(((S.pv - EANG[0] + Math.PI / 2) % Math.PI + Math.PI) % Math.PI - Math.PI / 2) * DEG;
+    S.hist.push(off); off < 1 ? Sound.complete() : Sound.tick(S.hist.length);
+    renderCtrl(); setTimeout(renderCtrl, 950);
+  }
+  else if (a === 'new') { S.pv = EANG[1] + (Math.random() < .5 ? 1 : -1) * (4 + Math.random() * 20) / DEG; S.hist = []; Sound.ui(); renderCtrl(); }
+});
+
+Sound.bindButtons({ music: '#musicBtn', sfx: '#soundBtn' });
+$('#resetBtn').addEventListener('click', () => location.reload());
+new ResizeObserver(resize).observe($('#stageB'));
+const k0 = ORDER.indexOf(location.hash.slice(1));
+if (k0 >= 1) { if (k0 > 2) S.found = [true, true]; S.reached = k0; setStage(ORDER[k0]); } else setStage('data');
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

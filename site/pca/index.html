@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PCA by Hand</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+.top{display:flex;align-items:center;gap:20px;padding:14px 20px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:22px;letter-spacing:-.02em}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.steps{display:flex;gap:6px;list-style:none;margin:0 0 0 auto;padding:0;flex-wrap:wrap;counter-reset:s}
+.steps li{font:600 12px var(--sans);padding:6px 11px;border-radius:99px;border:1px solid var(--line);color:var(--muted);display:flex;align-items:center;gap:6px}
+.steps li::before{content:counter(s);counter-increment:s;font:700 10px var(--mono);width:17px;height:17px;border-radius:50%;display:grid;place-items:center}
+.steps li.reach{cursor:pointer}
+.steps li.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.steps li.active::before{background:var(--accent);color:var(--on-accent)}
+.steps li.done{color:var(--ink)}
+.steps li.done::before{content:"✓";background:var(--pass)}
+.layout{display:grid;grid-template-columns:minmax(330px,440px) minmax(0,1fr);grid-template-areas:"ctrl stage" "table stage" "code stage";grid-template-rows:auto auto 1fr;gap:14px;padding:0 20px 20px;align-items:start}
+.card{border-radius:16px;min-width:0}
+#tableCard{grid-area:table;padding:14px 14px 10px}
+#ctrl{grid-area:ctrl;padding:16px}
+#code{grid-area:code}
+.stage{grid-area:stage;position:sticky;top:14px;display:flex;flex-direction:column;height:calc(100vh - 96px);min-height:600px;overflow:hidden}
+@media (max-width:900px){
+  .top{padding:12px 16px}
+  .steps{margin-left:0}
+  .layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"stage" "ctrl" "table" "code";padding:0 16px 16px}
+  .stage{position:relative;top:0;height:78vh;min-height:520px}
+}
+.card-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.card-h h2{margin:0;font-size:15px}
+.muted{color:var(--muted)} .small{font-size:12px}
+.tbl-wrap{overflow:auto;max-height:300px}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12.5px}
+th{font:600 11.5px var(--sans);text-align:right;padding:4px 6px 6px;white-space:nowrap;vertical-align:bottom;position:sticky;top:0;background:#0c1028;z-index:1;border-bottom:1.5px solid var(--line-strong)}
+th small{display:block;font:400 10px var(--sans);color:var(--muted)}
+th:first-child,td.idx{text-align:left}
+td{padding:4px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;transition:background-color .2s}
+td.idx{color:var(--muted)}
+td.pc{color:#c4a8ff;font-weight:700}
+tr.hl td{background:rgba(110,231,255,.12)}
+tr[data-i]{cursor:pointer}
+tr.hand td.idx{color:var(--ink)}
+tr.hand td.idx::after{content:"★";color:var(--accent);margin-left:4px;font-size:10px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;box-shadow:0 0 8px currentColor}
+.gpill{display:inline-flex;align-items:center;gap:5px;font:700 11px var(--mono)}
+.kicker{font:700 10.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+#ctrl h3{margin:0 0 6px;font-size:20px;letter-spacing:-.01em}
+#ctrl p{margin:0 0 12px;color:var(--muted);font-size:15px;line-height:1.5}
+#ctrl p b{color:var(--ink)}
+.btn{font:600 14px var(--sans);border:1px solid var(--line-strong);padding:9px 14px;border-radius:10px;cursor:pointer}
+.btn:hover:not(:disabled){transform:translateY(-1px)}
+.btn.ghost{background:transparent}
+.btn.sm{font-size:12.5px;padding:6px 10px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+a.btn{text-decoration:none;display:inline-block}
+.back{font:600 12px var(--sans);text-decoration:none}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.found{color:var(--pass);font:600 15px var(--sans);margin:0 0 10px}
+.note{font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+.lbl{font:700 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:4px 0 6px}
+.toggle{display:inline-flex;flex-wrap:wrap;background:rgba(255,255,255,.04);border:1px solid var(--line-strong);border-radius:11px;padding:3px;gap:3px;margin:0 0 12px}
+.toggle button{font:600 13px var(--sans);border:0;background:none;color:var(--muted);padding:7px 12px;border-radius:8px;cursor:pointer}
+.toggle button.on{background:var(--accent-soft);color:var(--accent);box-shadow:0 0 14px rgba(110,231,255,.18)}
+.kbig{display:flex;align-items:center;gap:10px;margin:2px 0 12px;flex-wrap:wrap}
+.kbig b{font:700 30px var(--mono);color:var(--accent);text-shadow:0 0 18px rgba(110,231,255,.5);min-width:2ch;text-align:center}
+.kbig span{color:var(--muted);font-size:14px}
+.sizes{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.sizes span{font:700 12px var(--mono);padding:3px 9px;border-radius:8px;border:1px solid currentColor;background:rgba(255,255,255,.03)}
+.callout{border:1px solid rgba(255,196,107,.35);background:rgba(255,196,107,.07);border-radius:12px;padding:10px 12px;margin:0 0 12px;font-size:14px;line-height:1.5;color:#ffe2b0}
+.callout b{color:#fff}
+.views{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 12px}
+.vcard{text-align:left;font:inherit;color:inherit;background:rgba(255,255,255,.03);border:1.5px solid var(--line);border-radius:12px;padding:9px 11px;cursor:pointer}
+.vcard b{display:block;font-size:13.5px}
+.vcard span{font:700 12px var(--mono);color:var(--accent)}
+.vcard.on{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 18px rgba(110,231,255,.18)}
+.sl{display:grid;grid-template-columns:64px 1fr 64px;gap:10px;align-items:center;margin:0 0 6px;font-size:13px}
+.sl b{font:700 12.5px var(--mono);color:#ffd9a0}
+.sl span{font:600 12px var(--mono);text-align:right}
+.sl input{width:100%;accent-color:#ffc46b}
+.contrib{display:grid;gap:3px;margin:0 0 12px}
+.cb{display:grid;grid-template-columns:58px 1fr 54px;gap:8px;align-items:center;font-size:12.5px;transition:opacity .2s}
+.cb .tr{position:relative;height:9px;background:rgba(255,255,255,.05);border-radius:9px}
+.cb .tr::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line-strong)}
+.cb .tr i{position:absolute;top:0;bottom:0;border-radius:9px}
+.cb b{font:600 11.5px var(--mono);text-align:right}
+.cb.off{opacity:.25}
+
+.stage-h{padding:14px 18px 10px;border-bottom:1px solid var(--line)}
+.stage-h h2{margin:0;font-size:17px;letter-spacing:-.01em}
+.stage-h p{margin:3px 0 0;font-size:13.5px;color:var(--muted)}
+.stage-b{position:relative;flex:1;min-height:0}
+#intro,#cv,#scree{position:absolute;inset:0;width:100%;height:100%;transition:opacity .5s}
+.hide{opacity:0;pointer-events:none}
+#intro{display:flex;flex-direction:column;justify-content:center;padding:24px;gap:16px;overflow:auto}
+.intro-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.icard{border:1px solid var(--line);border-radius:14px;padding:16px}
+.icard .num{font:700 13px var(--mono);width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);margin-bottom:10px}
+.icard h3{margin:0 0 6px;font-size:16.5px}
+.icard p{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}
+.curious summary{cursor:pointer;font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+#cv{touch-action:none;cursor:grab}
+#cv.drag{cursor:grabbing}
+#scree{display:flex;flex-direction:column;padding:16px 18px;gap:12px;overflow:auto}
+#screeSvg{width:100%;flex:1;min-height:250px}
+#screeSvg .bar{cursor:pointer}
+#screeSvg .tk{font:500 11px var(--mono);fill:var(--muted)}
+#screeSvg .grid{stroke:rgba(140,160,255,.08)}
+#screeSvg .cp{fill:none;stroke:#ffc46b;stroke-width:2.2;filter:drop-shadow(0 0 5px rgba(255,196,107,.7))}
+#screeSvg .cpd{fill:#ffc46b}
+#screeSvg .cpl{font:700 12px var(--mono);fill:#ffc46b;paint-order:stroke;stroke:#070a1c;stroke-width:4px}
+#screeSvg .bl{font:700 11px var(--mono);text-anchor:middle}
+#loadings{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:4px 18px}
+.ld{display:grid;grid-template-columns:54px 1fr 46px;gap:8px;align-items:center;font-size:12.5px}
+.ld .tr{position:relative;height:10px;background:rgba(255,255,255,.05);border-radius:9px}
+.ld .tr::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line-strong)}
+.ld .tr i{position:absolute;top:0;bottom:0;border-radius:9px}
+.ld b{font:600 11.5px var(--mono);text-align:right}
+.ldh{font:700 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<link rel="stylesheet" href="../shared/cosmos.css">
+</head>
+<body>
+<div class="cosmos-stars" aria-hidden="true"><i class="s1"></i><i class="s2"></i></div>
+<header class="top">
+  <div class="brand">
+    <a class="back" href="../">← ML Explainers</a>
+    <h1>PCA <span>by hand</span></h1>
+    <p>Turn a screen between two suns until the planets’ shadows spread the widest.</p>
+  </div>
+  <ol class="steps" id="steps">
+    <li data-s="data">Idea</li><li data-s="spin">Shadows</li><li data-s="three">3D</li><li data-s="all">All 16</li><li data-s="map">Map</li>
+  </ol>
+  <button class="btn ghost" id="musicBtn" aria-pressed="true">♫ Music on</button>
+  <button class="btn ghost" id="soundBtn" aria-pressed="true">Sound on</button>
+  <button class="btn ghost" id="resetBtn">Restart</button>
+</header>
+
+<main class="layout">
+  <section class="card" id="ctrl"></section>
+  <section class="card" id="tableCard">
+    <div class="card-h"><h2 id="tblTitle">The 10 cities</h2><span class="muted small" id="tblSub"></span></div>
+    <div class="tbl-wrap"><table id="tbl"></table></div>
+  </section>
+  <section class="card code" id="code"></section>
+
+  <section class="card stage">
+    <div class="stage-h"><h2 id="stTitle"></h2><p id="stSub"></p></div>
+    <div class="stage-b" id="stageB">
+      <div id="intro">
+        <div class="intro-grid">
+          <div class="icard"><div class="num">1</div><h3>Too many columns</h3><p>Each city has 16 numbers. A scatter plot shows only 2 at a time, so no single picture shows a whole city.</p></div>
+          <div class="icard"><div class="num">2</div><h3>Find the best angle</h3><p>Photograph a cup from above and it looks like a circle; from the side you see the handle. Some angles show more.</p></div>
+          <div class="icard"><div class="num">3</div><h3>Shadows that spread</h3><p>PCA turns a screen until the cities’ shadows on it spread out as much as possible. That direction is PC1.</p></div>
+        </div>
+        <details class="curious">
+          <summary>For the curious: the maths behind the pictures</summary>
+          <div class="mathgrid">
+            <div class="mcard"><div class="mlab">Where a city’s shadow lands on the screen</div><div data-tex="\tip{zi}{z_i} = \tip{phi1}{\phi_1}\,\tip{xi1}{x_{i1}} + \tip{phi2}{\phi_2}\,\tip{xi2}{x_{i2}}, \qquad \tip{phi1}{\phi_1}^2 + \tip{phi2}{\phi_2}^2 = 1" data-plain="z_i = φ₁·x_i1 + φ₂·x_i2, with φ₁² + φ₂² = 1"></div></div>
+            <div class="mcard"><div class="mlab">Spread kept: every shadow counts</div><div data-tex="\tip{kept}{\text{spread kept}} = \frac{1}{\tip{n}{n}-1}\sum_{i=1}^{\tip{n}{n}} \tip{zi}{z_i}^{2}" data-plain="spread kept = (1/(n−1)) · Σ z_i²"></div></div>
+            <div class="mcard"><div class="mlab">Pythagoras for each planet</div><div data-tex="\tip{di}{d_i}^{2} = \tip{zi}{z_i}^{2} + \tip{ri}{r_i}^{2}" data-plain="d_i² = z_i² + r_i²"></div></div>
+            <div class="mcard"><div class="mlab">Share of the spread a PC keeps</div><div data-tex="\tip{pve}{\text{PVE}_m} = \frac{\tip{lamm}{\lambda_m}}{\tip{lam1}{\lambda_1} + \dots + \tip{lamp}{\lambda_p}}" data-plain="PVE_m = λ_m / (λ_1 + … + λ_p)"></div></div>
+          </div>
+          <p class="mhint" style="margin-top:10px"><b>Hover or tap any symbol</b> to see what it means.</p>
+        </details>
+      </div>
+      <canvas id="cv" class="hide"></canvas>
+      <div id="scree" class="hide">
+        <svg id="screeSvg"></svg>
+        <div><div class="ldh" id="ldTitle"></div><div id="loadings"></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>window.MATH_TIPS = {
+ zi: { name: 'Shadow z', def: 'Where city i’s shadow lands on the screen, measured from the centre. In R this is the score, pr$x.' },
+ phi1: { name: 'Screen direction φ₁', def: 'How far the screen leans along EDUC. Together with φ₂ it is the screen’s direction; R calls these the loadings, pr$rotation.' },
+ phi2: { name: 'Screen direction φ₂', def: 'How far the screen leans along WWDRK. φ₁² + φ₂² = 1 keeps the direction one unit long.' },
+ xi1: { name: 'City i’s EDUC', def: 'City i’s EDUC, scaled and then centred, so 0 is the average city.' },
+ xi2: { name: 'City i’s WWDRK', def: 'City i’s WWDRK, scaled and then centred.' },
+ kept: { name: 'Spread kept', def: 'The average squared distance of the shadows from the centre (the variance of the shadows). Every planet counts, and a shadow twice as far out counts four times.' },
+ n: { name: 'Number of cities n', def: 'How many planets cast a shadow.', val: 'n = 10 in step 2' },
+ di: { name: 'Distance from centre d', def: 'How far planet i is from the centre of the cloud. Turning the screen never changes it.' },
+ ri: { name: 'Distance to the screen r', def: 'How far planet i floats off the screen: the part of the planet that its shadow cannot show.' },
+ pve: { name: 'Proportion of variance explained', def: 'Share of the total spread that PC m keeps.' },
+ lamm: { name: 'Spread kept by PC m', def: 'The spread of the shadows on PC m. Mathematically, the m-th eigenvalue.' },
+ lam1: { name: 'Spread kept by PC1', def: 'The largest: PC1 keeps the most.' },
+ lamp: { name: 'Spread kept by the last PC', def: 'The smallest. Adding all of them gives the total spread.' },
+};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="../shared/math.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/fx.js"></script>
+<script src="../shared/code.js"></script>
+<script src="../shared/pollution.js"></script>
+<script src="../shared/unsup.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const f2 = v => (Math.abs(v) < 0.005 ? 0 : v).toFixed(2);
+const pct = v => (v * 100).toFixed(1) + '%';
+const TAU = Math.PI * 2, DEG = 180 / Math.PI;
+const range = n => Array.from({ length: n }, (_, i) => i);
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const norm3 = a => { const l = Math.hypot(...a); return a.map(v => v / l); };
+
+/* ---------------- data (maths in shared/unsup.js, checked against R by tests/check.mjs) ---------------- */
+const P = window.POLLUTION, U = window.Unsup;
+const SHORT = P.cols.map(c => c.replace(/Real$/, ''));
+const N = P.rows.length, col = n => P.cols.indexOf(n + 'Real');
+const iE = col('EDUC'), iW = col('WWDRK'), iH = col('HOUS');
+const SC = U.scale(P.rows), Z = SC.X;
+const HAND = P.hand.map(r => r - 1);
+const PH = U.prcomp(HAND.map(i => [Z[i][iE], Z[i][iW]]), P.rSigns.hand);
+const HC = HAND.map(i => [Z[i][iE] - PH.center[0], Z[i][iW] - PH.center[1]]);   // centred, as prcomp sees them
+const TOT2 = PH.sdev.reduce((s, v) => s + v * v, 0);
+const TH_STAR = (() => { const a = Math.atan2(PH.rotation[1][0], PH.rotation[0][0]); return ((a % Math.PI) + Math.PI) % Math.PI; })();
+const T3 = Z.map(r => [r[iE], r[iW], r[iH]]);
+const P3 = U.prcomp(T3, P.rSigns.tri);
+const TOT3 = P3.sdev.reduce((s, v) => s + v * v, 0);
+const PVE3 = P3.sdev.map(v => v * v / TOT3);
+const PCV = c => [P3.rotation[0][c], P3.rotation[1][c], P3.rotation[2][c]];
+const PF = U.prcomp(Z, P.rSigns.full);
+const HCL = U.cutree(U.hclustWard(Z), 4);
+const PAL = ['#6ee7ff', '#ff6fa8', '#ffc46b', '#4dffb4', '#a78bfa'];
+const STAR = '#e9ecff', C1 = '#4dffb4', C2 = '#a78bfa', C3 = '#ffc46b';
+
+function spinVar(th) {                    // spread of the shadows on a screen at angle th
+  const c = Math.cos(th), s = Math.sin(th); let v = 0;
+  HC.forEach(([x, y]) => { v += (c * x + s * y) ** 2; });
+  return v / (HC.length - 1);
+}
+const VMAX = spinVar(TH_STAR);
+const var3 = d => { let v = 0; T3.forEach(p => { v += dot3(p, d) ** 2; }); return v / (N - 1); };
+
+/* ---------------- quaternions for the 3-D camera ---------------- */
+const Q = {
+  mul(a, b) { const [aw, ax, ay, az] = a, [bw, bx, by, bz] = b; return [aw * bw - ax * bx - ay * by - az * bz, aw * bx + ax * bw + ay * bz - az * by, aw * by - ax * bz + ay * bw + az * bx, aw * bz + ax * by - ay * bx + az * bw]; },
+  axis(v, a) { const s = Math.sin(a / 2); return [Math.cos(a / 2), v[0] * s, v[1] * s, v[2] * s]; },
+  unit(q) { const l = Math.hypot(...q); return q.map(x => x / l); },
+  mat([w, x, y, z]) { return [[1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)], [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)], [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]]; },
+  fromRows(m) {
+    const tr = m[0][0] + m[1][1] + m[2][2]; let S2;
+    if (tr > 0) { S2 = Math.sqrt(tr + 1) * 2; return Q.unit([.25 * S2, (m[2][1] - m[1][2]) / S2, (m[0][2] - m[2][0]) / S2, (m[1][0] - m[0][1]) / S2]); }
+    if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) { S2 = Math.sqrt(1 + m[0][0] - m[1][1] - m[2][2]) * 2; return Q.unit([(m[2][1] - m[1][2]) / S2, .25 * S2, (m[0][1] + m[1][0]) / S2, (m[0][2] + m[2][0]) / S2]); }
+    if (m[1][1] > m[2][2]) { S2 = Math.sqrt(1 + m[1][1] - m[0][0] - m[2][2]) * 2; return Q.unit([(m[0][2] - m[2][0]) / S2, (m[0][1] + m[1][0]) / S2, .25 * S2, (m[1][2] + m[2][1]) / S2]); }
+    S2 = Math.sqrt(1 + m[2][2] - m[0][0] - m[1][1]) * 2; return Q.unit([(m[1][0] - m[0][1]) / S2, (m[0][2] + m[2][0]) / S2, (m[1][2] + m[2][1]) / S2, .25 * S2]);
+  },
+  slerp(a, b, t) {
+    let d = a.reduce((s, v, i) => s + v * b[i], 0);
+    if (d < 0) { b = b.map(v => -v); d = -d; }
+    if (d > .9995) return Q.unit(a.map((v, i) => lerp(v, b[i], t)));
+    const th = Math.acos(d), s = Math.sin(th);
+    return a.map((v, i) => (Math.sin((1 - t) * th) * v + Math.sin(t * th) * b[i]) / s);
+  },
+};
+// camera that looks along f with screen-right r (r ⟂ f); rows r, u, f make a right-handed frame
+const camLook = (f, r) => { f = norm3(f); r = norm3(r.map((v, i) => v - dot3(r, f) * f[i])); return Q.fromRows([r, cross3(f, r), f]); };
+
+/* ---------------- state ---------------- */
+const ORDER = ['data', 'spin', 'three', 'all', 'map'];
+const S = {
+  stage: 'data', reached: 0, busy: false, hover: -1, flashes: [],
+  th: 100 / DEG, seen: new Uint8Array(180), found: false, pc2: null, pc2T0: 0, light: 'pc1',
+  q: [1, 0, 0, 0], qAnim: null, idle: true, p3: 'pick1', lock1: null, alpha: 20 / DEG, view: null,
+  pc: 0, keep: 2,
+  mode: 'explore', colour: 'hcl', hoverVar: -1, walk: null, build: null, unfoldT0: 0,
+};
+
+/* ---------------- code panel: there for those who want it, folded away by default ---------------- */
+Code.mount('#code', {
+  R: [
+    ['read', 'pollution <- read.csv("pollution.csv")'],
+    ['read', 'pollution_scaled <- data.frame(scale(pollution))'],
+    ['', ''],
+    ['', '# step 2: 10 cities, 2 columns'],
+    ['hand', 'hand <- pollution_scaled[c(1,5,9,16,24,28,33,41,49,59),'],
+    ['hand', '                         c("EDUCReal","WWDRKReal")]'],
+    ['hand', 'pr.hand <- prcomp(hand)        # centres the columns first'],
+    ['rot', 'pr.hand$rotation               # PC1 and PC2: the two screen directions'],
+    ['rot', 'pr.hand$x                      # each city\'s shadows on them'],
+    ['', ''],
+    ['', '# step 3: add a third column'],
+    ['three', 'pr.3 <- prcomp(pollution_scaled[, c("EDUCReal","WWDRKReal","HOUSReal")])'],
+    ['three', 'summary(pr.3)                  # share of the spread on each PC'],
+    ['', ''],
+    ['', '# steps 4-5: all 16 columns (the script)'],
+    ['prcomp', 'pr.out <- prcomp(pollution_scaled, scale=F)'],
+    ['pve', 'pve <- pr.out$sdev^2 / sum(pr.out$sdev^2)'],
+    ['pve', 'plot(cumsum(pve), xlab="Principal components", type="l", ylim=c(0,1))'],
+    ['map', 'library(factoextra)'],
+    ['map', 'fviz_pca_biplot(pr.out, label="var", habillage=clusterpollution3$cluster,'],
+    ['map', '                addEllipses=TRUE, ellipse.level=0.95)'],
+  ],
+  Python: [
+    ['read', 'import pandas as pd'],
+    ['read', 'from sklearn.decomposition import PCA'],
+    ['read', 'pollution = pd.read_csv("pollution.csv")'],
+    ['read', 'pollution_scaled = (pollution - pollution.mean()) / pollution.std()'],
+    ['', ''],
+    ['', '# step 2: 10 cities, 2 columns'],
+    ['hand', 'hand = pollution_scaled.iloc[[0,4,8,15,23,27,32,40,48,58]][["EDUCReal","WWDRKReal"]]'],
+    ['hand', 'pca_hand = PCA().fit(hand)'],
+    ['rot', 'pca_hand.components_            # PC1 and PC2 (signs may differ from R)'],
+    ['rot', 'pca_hand.transform(hand)        # each city\'s shadows'],
+    ['', ''],
+    ['', '# step 3: add a third column'],
+    ['three', 'pca3 = PCA().fit(pollution_scaled[["EDUCReal","WWDRKReal","HOUSReal"]])'],
+    ['three', 'pca3.explained_variance_ratio_'],
+    ['', ''],
+    ['', '# steps 4-5: all 16 columns'],
+    ['prcomp', 'pca = PCA().fit(pollution_scaled)'],
+    ['pve', 'pve = pca.explained_variance_ratio_'],
+    ['pve', 'import matplotlib.pyplot as plt; plt.plot(range(1, 17), pve.cumsum())'],
+    ['map', 'scores = pca.transform(pollution_scaled)'],
+    ['map', 'plt.scatter(scores[:, 0], scores[:, 1], c=groups)'],
+  ],
+}, { collapsed: true });
+
+/* ---------------- canvas helpers ---------------- */
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  const r = cv.getBoundingClientRect(); DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = Math.max(10, r.width); H = Math.max(10, r.height);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  if (S.stage === 'all') drawScree();
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function beam(x1, y1, x2, y2, col, w, a) {
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = col; ctx.lineCap = 'round';
+  [[w * 7, .06], [w * 3.5, .14], [w * 1.6, .35], [w, 1]].forEach(([lw, al]) => { ctx.globalAlpha = al * a; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); });
+  ctx.restore();
+}
+function label(text, x, y, colr, align = 'left', size = 12) {
+  ctx.font = `700 ${size}px JetBrains Mono, monospace`; const w = ctx.measureText(text).width + 12;
+  const x0 = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+  ctx.fillStyle = 'rgba(6,8,22,.88)'; roundRect(x0, y - 11, w, 22, 6); ctx.fill();
+  ctx.fillStyle = colr; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(text, x0 + 6, y + 1);
+}
+// stacked meter: segs = [{v, col, lab}], total = sum of all spread
+function meter(x, y, w, segs, total, title) {
+  ctx.fillStyle = 'rgba(6,8,22,.88)'; ctx.strokeStyle = 'rgba(110,231,255,.25)'; ctx.lineWidth = 1;
+  roundRect(x, y, w, 66, 10); ctx.fill(); ctx.stroke();
+  ctx.font = '700 11px JetBrains Mono, monospace'; ctx.textBaseline = 'top'; ctx.textAlign = 'left'; ctx.fillStyle = '#c9d0f5';
+  ctx.fillText(title, x + 10, y + 9);
+  const bx = x + 10, bw = w - 20, by = y + 27;
+  ctx.fillStyle = 'rgba(255,111,168,.55)'; roundRect(bx, by, bw, 12, 6); ctx.fill();
+  let cx = bx;
+  segs.forEach(s => { const sw = bw * s.v / total; ctx.fillStyle = s.col; ctx.fillRect(cx, by, Math.max(1, sw), 12); cx += sw; });
+  ctx.font = '700 12.5px JetBrains Mono, monospace'; ctx.textBaseline = 'top';
+  let tx = bx;
+  segs.forEach(s => { ctx.fillStyle = s.col; ctx.fillText(`${s.lab} ${pct(s.v / total)}`, tx, by + 17); tx += ctx.measureText(`${s.lab} ${pct(s.v / total)}`).width + 12; });
+  const lost = total - segs.reduce((a, s) => a + s.v, 0);
+  if (lost / total > .001) { ctx.textAlign = 'right'; ctx.fillStyle = '#ff9ec4'; ctx.fillText(`lost ${pct(lost / total)}`, bx + bw, by + 17); }
+}
+function placeLabels(items, avoid = []) {
+  ctx.font = '700 12px JetBrains Mono, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const boxes = avoid.slice();
+  const hit = b => boxes.some(o => b.x < o.x + o.w && b.x + b.w > o.x && b.y < o.y + o.h && b.y + b.h > o.y) ||
+    items.some(s => s.x > b.x - 8 && s.x < b.x + b.w + 8 && s.y > b.y - 8 && s.y < b.y + b.h + 8);
+  items.slice().sort((a, b) => a.x - b.x).forEach(it => {
+    const w = ctx.measureText(it.t).width + 8, h = 17;
+    const spots = [[12, -h - 6], [12, 6], [-w - 12, -h - 6], [-w - 12, 6], [-w / 2, -h - 14], [-w / 2, 14]];
+    let b = null; for (const [dx, dy] of spots) { const c = { x: it.x + dx, y: it.y + dy, w, h }; if (!hit(c)) { b = c; break; } }
+    if (!b) b = { x: it.x + 12, y: it.y - h - 6, w, h };
+    boxes.push(b);
+    ctx.fillStyle = 'rgba(4,6,16,.8)'; ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle = it.on ? '#fff' : '#c9d0f5'; ctx.fillText(it.t, b.x + 4, b.y + h / 2 + 1);
+  });
+}
+
+/* ================= step 2: planets, two suns, a screen ================= */
+let SP = null;
+function spinLayout() {
+  const strip = Math.min(150, Math.max(110, H * .24)), top = 6, bot = H - strip - 6;
+  const cx = W / 2, cy = (top + bot) / 2;
+  const R = Math.max(...HC.map(([x, y]) => Math.hypot(x, y)));
+  const s = Math.min(W * .3, (bot - top) * .34) / R;
+  return { cx, cy, s, top, bot, strip };
+}
+// distance from the centre to the edge of the sky along a canvas direction
+function edgeDist(L, dx, dy) {
+  const tx = dx > 1e-6 ? (W - L.cx) / dx : dx < -1e-6 ? -L.cx / dx : Infinity;
+  const ty = dy > 1e-6 ? (L.bot - L.cy) / dy : dy < -1e-6 ? (L.top - L.cy) / dy : Infinity;
+  return Math.min(tx, ty);
+}
+function sun(x, y, t, a) {
+  FX.glow(ctx, x, y, 120, '#ff9f43', .55 * a); FX.glow(ctx, x, y, 60, '#ffe08a', .7 * a);
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .5 * a; ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 1.5;
+  for (let k = 0; k < 14; k++) {
+    const ang = k / 14 * TAU + t / 4000, l = 26 + 9 * Math.sin(t / 300 + k * 1.7);
+    ctx.beginPath(); ctx.moveTo(x + Math.cos(ang) * 18, y + Math.sin(ang) * 18); ctx.lineTo(x + Math.cos(ang) * l, y + Math.sin(ang) * l); ctx.stroke();
+  }
+  ctx.restore();
+  const g = ctx.createRadialGradient(x - 4, y - 4, 1, x, y, 16);
+  g.addColorStop(0, '#fffbe8'); g.addColorStop(.45, '#ffe08a'); g.addColorStop(1, '#ff9f43');
+  ctx.globalAlpha = a; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 16, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+}
+/*
+ * One screen with its two suns. The suns sit on the line at right angles to the screen, one on each side, so their
+ * light hits the screen square on and every planet's shadow lands exactly where the maths puts its score.
+ * Shadows are drawn as soft bands: a dark core (umbra) that narrows and a fuzzy edge (penumbra) that widens the
+ * further the planet floats from the screen, as with a real sun of finite size.
+ */
+function screenSystem(L, ang, o, t) {
+  const c = Math.cos(ang), s = Math.sin(ang), R = 9, len = 2400 * o.grow;
+  const nx = -s, ny = -c;                                  // canvas direction of the screen's normal (+ side)
+  const Dp = edgeDist(L, nx, ny) - 34, Dm = edgeDist(L, -nx, -ny) - 34;
+  ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(-ang);
+  if (o.lit > 0) {
+    // sunlight fills each side; past the sun the gradient just holds its strongest colour, so there is no edge
+    const wash = (y0, far) => { const g = ctx.createLinearGradient(0, y0, 0, 0); g.addColorStop(0, `rgba(255,190,110,${.13 * o.lit})`); g.addColorStop(1, `rgba(255,190,110,${.025 * o.lit})`); ctx.fillStyle = g; ctx.fillRect(-len, Math.min(far, 0), 2 * len, Math.abs(far)); };
+    wash(-Dp, -3000); wash(Dm, 3000);
+    ctx.save(); ctx.setLineDash([2, 16]); ctx.lineDashOffset = -t / 25; ctx.strokeStyle = `rgba(255,214,140,${.16 * o.lit})`; ctx.lineWidth = 1;
+    for (let x = -W; x <= W; x += 30) { ctx.beginPath(); ctx.moveTo(x, -Dp); ctx.lineTo(x, 0); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, Dm); ctx.lineTo(x, 0); ctx.stroke(); }
+    ctx.restore();
+  }
+  // the screen
+  const half = Math.min(len, 2400);
+  ctx.restore();
+  beam(L.cx - c * half, L.cy + s * half, L.cx + c * half, L.cy - s * half, o.col, 2.2, .35 + .65 * Math.max(o.lit, .3));
+  ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(-ang);
+  HC.forEach(([x, y], k) => {
+    const u = (x * c + y * s) * L.s, w = (-x * s + y * c) * L.s, dist = Math.abs(w), py = -w, dir = py < 0 ? 1 : -1;
+    if (o.lit > 0) {
+      const NS = 14;
+      for (let j = 0; j < NS; j++) {
+        const d = dist * (j + .5) / NS, pw = R + d * .075, uw = Math.max(0, R - d * .03), a = .78 * o.lit * (1 - .35 * d / (dist + 80));
+        const g = ctx.createLinearGradient(u - pw, 0, u + pw, 0), e = (pw - uw) / (2 * pw);
+        g.addColorStop(0, 'rgba(2,3,12,0)'); g.addColorStop(Math.max(.001, e), `rgba(2,3,12,${a})`); g.addColorStop(Math.min(.999, 1 - e), `rgba(2,3,12,${a})`); g.addColorStop(1, 'rgba(2,3,12,0)');
+        ctx.fillStyle = g; const y0 = py + dir * dist * j / NS; ctx.fillRect(u - pw, dir > 0 ? y0 : y0 - dist / NS, 2 * pw, dist / NS + .6);
+      }
+      const pw = R + dist * .075, g = ctx.createRadialGradient(u, 0, 0, u, 0, pw * 1.1);
+      g.addColorStop(0, `rgba(1,2,8,${.9 * o.lit})`); g.addColorStop(1, 'rgba(1,2,8,0)');
+      ctx.save(); ctx.scale(1, .35); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(u, 0, pw * 1.1, 0, TAU); ctx.fill(); ctx.restore();
+    }
+    ctx.fillStyle = o.col; ctx.globalAlpha = .95; ctx.beginPath(); ctx.arc(u, 0, 2.6, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+  });
+  ctx.restore();
+  if (o.lit > 0) { sun(L.cx + nx * Dp, L.cy + ny * Dp, t, o.lit); sun(L.cx - nx * Dm, L.cy - ny * Dm, t, o.lit); }
+  return { nx, ny };
+}
+function planet(x, y, R, lx, ly, hv) {
+  FX.glow(ctx, x, y, R * 2.4, '#8fb0ff', .25);
+  const g = ctx.createRadialGradient(x + lx * R * .45, y + ly * R * .45, 1, x, y, R);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(.3, '#cfdcff'); g.addColorStop(.75, '#5468b0'); g.addColorStop(1, '#151b45');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.fill();
+  if (hv) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y, R + 5, 0, TAU); ctx.stroke(); }
+}
+function drawSpin(t) {
+  const L = SP = spinLayout(), th = S.th;
+  const p2 = S.pc2 == null ? 0 : ease(clamp((t - S.pc2T0) / 900, 0, 1));
+  const lit2 = p2 > 0 && S.light === 'pc2' ? p2 : 0, lit1 = 1 - lit2;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, L.bot + 4); ctx.clip();
+  // faint column axes
+  ctx.strokeStyle = 'rgba(140,160,255,.1)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, L.cy); ctx.lineTo(W, L.cy); ctx.moveTo(L.cx, L.top); ctx.lineTo(L.cx, L.bot); ctx.stroke();
+  ctx.font = '600 12px Space Grotesk, sans-serif'; ctx.fillStyle = 'rgba(170,179,220,.8)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+  ctx.fillText('EDUC →', W - 12, L.cy - 5);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('↑ WWDRK', L.cx + 6, L.top + 74);
+  if (p2 > 0) screenSystem(L, th + Math.PI / 2, { lit: lit2, col: C2, grow: p2 }, t);
+  const n1 = screenSystem(L, th, { lit: lit1, col: S.found ? C1 : '#6ee7ff', grow: 1 }, t);
+  // planets, lit from their own sun
+  const c = Math.cos(th), s = Math.sin(th);
+  HC.forEach(([x, y], k) => {
+    const px = L.cx + x * L.s, py = L.cy - y * L.s;
+    const side = lit2 > .5 ? Math.sign(c * x + s * y) || 1 : Math.sign(-x * s + y * c) || 1;
+    const lx = lit2 > .5 ? side * c : side * n1.nx, ly = lit2 > .5 ? -side * s : side * n1.ny;
+    planet(px, py, 9, lx, ly, S.hover === HAND[k]);
+  });
+  placeLabels(HC.map(([x, y], k) => ({ x: L.cx + x * L.s, y: L.cy - y * L.s, t: '#' + (HAND[k] + 1), on: S.hover === HAND[k] })), [{ x: 0, y: 0, w: 300, h: 84 }]);
+  ctx.restore();
+  // meter
+  const k1 = spinVar(th);
+  if (p2 > 0) meter(12, 10, Math.min(300, W * .55), [{ v: k1, col: C1, lab: 'PC1' }, { v: (TOT2 - k1) * p2, col: C2, lab: 'PC2' }], TOT2, 'SPREAD KEPT');
+  else meter(12, 10, Math.min(300, W * .55), [{ v: k1, col: S.found ? C1 : '#6ee7ff', lab: 'screen' }], TOT2, 'SPREAD KEPT BY THE SCREEN');
+  if (!S.found) label(`screen at ${((th * DEG) % 180).toFixed(0)}°`, W - 12, 22, '#c9d0f5', 'right');
+  drawStrip(L, p2);
+  S.flashes = S.flashes.filter(f => t - f.t0 < 1100);
+  S.flashes.forEach(f => { const k = (t - f.t0) / 1100; FX.glow(ctx, L.cx, L.cy, 80 + k * 500, C1, .5 * (1 - k)); });
+}
+// bottom strip: each planet's Pythagoras bar (left) and spread against angle (right)
+function drawStrip(L, p2) {
+  const y0 = H - 14, y1 = H - L.strip + 30, split = Math.max(170, W * .44);
+  ctx.fillStyle = 'rgba(6,8,22,.7)'; roundRect(6, H - L.strip, W - 12, L.strip - 4, 10); ctx.fill();
+  ctx.font = '700 10.5px JetBrains Mono, monospace'; ctx.fillStyle = '#aab3dc'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  const narrow = W < 640;
+  ctx.fillText(narrow ? 'EACH PLANET' : 'EACH PLANET: shadow² + distance² stays fixed', 16, H - L.strip + 9);
+  const c = Math.cos(S.th), s = Math.sin(S.th);
+  const d2 = HC.map(([x, y]) => x * x + y * y), mx = Math.max(...d2), bw = (split - 30) / HC.length;
+  HC.forEach(([x, y], k) => {
+    const z2 = (c * x + s * y) ** 2, r2 = d2[k] - z2, bx = 16 + k * bw, hh = (y0 - 14 - y1) * d2[k] / mx, base = y0 - 14;
+    const hz = hh * z2 / d2[k];
+    ctx.fillStyle = S.found ? C1 : '#6ee7ff'; ctx.fillRect(bx + 2, base - hz, bw - 5, hz);
+    ctx.fillStyle = p2 > 0 ? C2 : 'rgba(255,111,168,.85)'; ctx.globalAlpha = p2 > 0 ? .4 + .6 * p2 : 1; ctx.fillRect(bx + 2, base - hh, bw - 5, hh - hz); ctx.globalAlpha = 1;
+    if (S.hover === HAND[k]) { ctx.strokeStyle = '#fff'; ctx.strokeRect(bx + 1.5, base - hh - .5, bw - 4, hh + 1); }
+    ctx.fillStyle = '#8e97bd'; ctx.font = '600 9.5px JetBrains Mono, monospace'; ctx.textAlign = 'center'; ctx.fillText('#' + (HAND[k] + 1), bx + bw / 2, base + 2);
+  });
+  // spread against angle
+  const x0 = split + 26, x1 = W - 18, X = d => x0 + d / 180 * (x1 - x0), Y = v => y0 - 12 - v / TOT2 * (y0 - 12 - y1);
+  ctx.textAlign = 'left'; ctx.fillStyle = '#aab3dc'; ctx.font = '700 10.5px JetBrains Mono, monospace';
+  ctx.fillText(narrow ? 'SPREAD vs ANGLE' : 'SPREAD KEPT vs SCREEN ANGLE', x0, H - L.strip + 9);
+  ctx.fillStyle = '#8e97bd'; ctx.textAlign = 'center'; ctx.font = '600 10px JetBrains Mono, monospace';
+  [0, 90, 180].forEach(d => ctx.fillText(d + '°', X(d), y0 - 9));
+  for (let d = 0; d < 180; d++) {
+    ctx.strokeStyle = S.seen[d] ? '#6ee7ff' : 'rgba(140,160,255,.14)'; ctx.lineWidth = S.seen[d] ? 2.2 : 1;
+    ctx.beginPath(); ctx.moveTo(X(d), Y(spinVar(d / DEG))); ctx.lineTo(X(d + 1), Y(spinVar((d + 1) / DEG))); ctx.stroke();
+  }
+  const cd = (S.th * DEG) % 180;
+  ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.moveTo(X(cd), y0 - 12); ctx.lineTo(X(cd), y1 - 4); ctx.stroke();
+  FX.ball(ctx, null, { x: X(cd), y: Y(spinVar(S.th)), r: 4 }, '#fff', { glow: true });
+  if (S.found) { const ds = TH_STAR * DEG; FX.ball(ctx, null, { x: X(ds), y: Y(VMAX), r: 4.5 }, C1, { glow: true }); }
+}
+function angleAt(e) {
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left - SP.cx, y = -(e.clientY - r.top - SP.cy);
+  return ((Math.atan2(y, x) % Math.PI) + Math.PI) % Math.PI;
+}
+function setTheta(th, byUser) {
+  const prev = S.th; S.th = th;
+  const a = Math.round((prev * DEG) % 180), b = Math.round((th * DEG) % 180);
+  if (Math.abs(a - b) < 40) for (let d = Math.min(a, b); d <= Math.max(a, b); d++) S.seen[d % 180] = 1; else S.seen[b % 180] = 1;
+  if (byUser && !S.found) {
+    const diff = Math.abs(((th - TH_STAR + Math.PI / 2) % Math.PI + Math.PI) % Math.PI - Math.PI / 2) * DEG;
+    if (diff < 1.5) foundIt();
+    else if (Math.floor(b / 10) !== Math.floor(a / 10)) Sound.tick(Math.round(spinVar(th) / TOT2 * 12));
+    renderCtrlSoon();
+  }
+}
+let ctrlTimer = 0;
+function renderCtrlSoon() { if (!ctrlTimer) ctrlTimer = setTimeout(() => { ctrlTimer = 0; renderCtrl(); }, 120); }
+function foundIt() {
+  S.found = true; S.th = TH_STAR; Sound.verdict(true);
+  S.flashes.push({ t0: performance.now() });
+  Code.focus(['rot']); renderCtrl(); renderTable();
+}
+function animate(dur, fn) {
+  const t0 = performance.now();
+  return new Promise(res => { const step = now => { const u = clamp((now - t0) / dur, 0, 1); fn(u, now); if (u < 1) requestAnimationFrame(step); else res(); }; requestAnimationFrame(step); });
+}
+async function animTheta(to, dur = 1300) {
+  const from = S.th; let d = to - from; while (d > Math.PI / 2) d -= Math.PI; while (d < -Math.PI / 2) d += Math.PI;
+  S.busy = true; await animate(dur, u => setTheta(from + d * ease(u))); S.busy = false;
+}
+async function sweep() {
+  S.busy = true; renderCtrl();
+  const from = S.th; let last = -1;
+  await animate(3600, u => { setTheta(from + Math.PI * u); const k = Math.floor(u * 18); if (k !== last) { last = k; Sound.pop(k, u * 1.6 - .8); } });
+  S.busy = false; renderCtrl();
+}
+
+/* ================= step 3: the same idea in 3-D ================= */
+function camRows() { return Q.mat(S.q); }
+function draw3(t) {
+  if (S.qAnim) { const a = S.qAnim, u = clamp((t - a.t0) / a.dur, 0, 1); S.q = Q.slerp(a.from, a.to, ease(u)); if (u >= 1) { S.qAnim = null; if (a.done) a.done(); } }
+  else if (S.idle) S.q = Q.unit(Q.mul(Q.axis([0, 1, 0], .003), S.q));
+  const [r, u, f] = camRows();
+  const R = Math.max(...T3.map(p => Math.hypot(...p)));
+  const sc = Math.min(W, H) * .36 / R, cx = W / 2, cy = H / 2 + 18;
+  const PX = p => cx + dot3(p, r) * sc, PY = p => cy - dot3(p, u) * sc;
+  // the wall the shadow falls on
+  ctx.strokeStyle = 'rgba(110,231,255,.07)'; ctx.lineWidth = 1;
+  for (let g = -5; g <= 5; g++) { ctx.beginPath(); ctx.moveTo(cx + g * sc, 0); ctx.lineTo(cx + g * sc, H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, cy + g * sc); ctx.lineTo(W, cy + g * sc); ctx.stroke(); }
+  // column axes
+  [['EDUC', [1, 0, 0]], ['WWDRK', [0, 1, 0]], ['HOUS', [0, 0, 1]]].forEach(([nm, e]) => {
+    const b = e.map(v => v * 2.7), a = e.map(v => v * -2.7), facing = Math.abs(dot3(e, f)) > .97;
+    ctx.strokeStyle = 'rgba(200,210,255,.22)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(PX(a), PY(a)); ctx.lineTo(PX(b), PY(b)); ctx.stroke();
+    ctx.font = '600 12px Space Grotesk, sans-serif'; ctx.fillStyle = 'rgba(170,179,220,.85)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(nm + (facing ? ' (points at you)' : ''), PX(b), PY(b) - 12);
+  });
+  // the line the shadows fall on, and the shadows
+  let bdir = null, bcol = '#6ee7ff';
+  if (S.p3 === 'pick1') bdir = r;
+  else if (S.p3 === 'pick2') { bdir = lineDir(); bcol = '#c9b6ff'; }
+  if (bdir) {
+    const bx = dot3(bdir, r), by = dot3(bdir, u), L2 = Math.max(W, H);
+    beam(cx - bx * L2, cy + by * L2, cx + bx * L2, cy - by * L2, bcol, 2, 1);
+    T3.forEach(p => {
+      const z = dot3(p, bdir), fx = cx + z * bx * sc, fy = cy - z * by * sc;
+      ctx.strokeStyle = 'rgba(255,111,168,.28)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(PX(p), PY(p)); ctx.lineTo(fx, fy); ctx.stroke();
+      ctx.fillStyle = bcol; ctx.beginPath(); ctx.arc(fx, fy, 2.2, 0, TAU); ctx.fill();
+    });
+  }
+  // PCs found so far
+  const shown = S.p3 === 'pick1' ? [] : S.p3 === 'pick2' ? [0] : S.p3 === 'pc2' ? [0, 1] : [0, 1, 2];
+  shown.forEach(k => {
+    const v = PCV(k), b = v.map(x => x * 3.2), a = v.map(x => x * -3.2), colr = [C1, C2, C3][k];
+    const end = Math.hypot(PX(b) - cx, PY(b) - cy);
+    if (end < 14) { FX.glow(ctx, cx, cy, 36, colr, .8); label(`PC${k + 1} points at you`, cx + 16, cy - 20, colr); }
+    else { beam(PX(a), PY(a), PX(b), PY(b), colr, 1.8, .95); label(`PC${k + 1} · ${pct(PVE3[k])}`, PX(b) + 8, PY(b), colr); }
+  });
+  // cities, far ones first
+  const pts = T3.map((p, i) => ({ i, x: PX(p), y: PY(p), d: dot3(p, f) })).sort((a, b) => b.d - a.d);
+  pts.forEach(q => {
+    const k = clamp((q.d + 3) / 6, 0, 1), hv = S.hover === q.i;
+    ctx.globalAlpha = .5 + .5 * (1 - k);
+    FX.ball(ctx, null, { x: q.x, y: q.y, r: (hv ? 6.5 : 4.2) * (1.25 - .5 * k) }, HAND.includes(q.i) ? '#6ee7ff' : STAR, { glow: true });
+    ctx.globalAlpha = 1;
+  });
+  // meter
+  const mw = Math.min(320, W * .6);
+  if (S.p3 === 'pick1') { const v = var3(r); meter(12, 10, mw, [{ v, col: '#6ee7ff', lab: 'this line' }], TOT3, 'SPREAD ON THE LINE'); }
+  else if (S.p3 === 'pick2') { const b = bdir, v = var3(b); meter(12, 10, mw, [{ v: TOT3 * PVE3[0], col: C1, lab: 'PC1' }, { v, col: '#c9b6ff', lab: 'line' }], TOT3, 'PC1 + THE NEW LINE'); }
+  else if (S.p3 === 'pc2') meter(12, 10, mw, [{ v: TOT3 * PVE3[0], col: C1, lab: 'PC1' }, { v: TOT3 * PVE3[1], col: C2, lab: 'PC2' }], TOT3, 'PC1 + PC2');
+  else { const kept = TOT3 - var3(f); meter(12, 10, mw, [{ v: kept, col: '#6ee7ff', lab: 'this wall' }], TOT3, 'THE WALL SHOWS'); }
+}
+function animQ(to, dur = 1500, done) { S.qAnim = { from: S.q.slice(), to, t0: performance.now(), dur, done }; S.idle = false; }
+const VIEWS = {
+  best:   { name: 'Best wall', q: () => camLook(PCV(2), PCV(0)), why: `You look along PC3, so the wall shows PC1 and PC2. Only PC3’s ${pct(PVE3[2])} hides in depth: this is the flattest side of the pancake. The map in step 5 uses this kind of view.` },
+  along1: { name: 'Along PC1', q: () => camLook(PCV(0), PCV(1)), why: `The biggest spread points straight at you, so the cloud looks thin and crowded. The wall shows only PC2 and PC3: ${pct(PVE3[1] + PVE3[2])}. The worst possible view.` },
+  along2: { name: 'Along PC2', q: () => camLook(PCV(1), PCV(0)), why: `PC2 points at you, so you lose its ${pct(PVE3[1])}. You still see the long PC1 spread, so the cloud looks wide but too thin.` },
+  orig:   { name: 'EDUC × WWDRK', q: () => camLook([0, 0, 1], [1, 0, 0]), why: `The step 2 view: HOUS points at you. Two original columns already show ${pct(1 - var3([0, 0, 1]) / TOT3)}, because EDUC, WWDRK and HOUS move together.` },
+};
+
+/* ================= step 4: all 16 ================= */
+function drawScree() {
+  const svg = $('#screeSvg'), r = svg.getBoundingClientRect(); if (!r.width) return;
+  const w = r.width, h = r.height, L = 46, R = 16, T = 26, B = 30, n = 16;
+  const lam = PF.sdev.map(v => v * v), tot = lam.reduce((a, b) => a + b, 0);
+  const bw = (w - L - R) / n, X = k => L + (k + .5) * bw, Y = v => h - B - v * (h - T - B);
+  let s = '';
+  [0, .25, .5, .75, 1].forEach(v => s += `<line class="grid" x1="${L}" x2="${w - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tk" x="${L - 8}" y="${Y(v) + 3.5}" text-anchor="end">${v * 100}%</text>`);
+  s += `<defs><linearGradient id="gk" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#4fd8ff"/><stop offset="1" stop-color="#a78bfa"/></linearGradient>
+    <filter id="gl" x="-50%" y="-20%" width="200%" height="140%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+  lam.forEach((v, k) => {
+    const pv = v / tot, on = k < S.keep, sel = k === S.pc;
+    s += `<g class="bar" data-pc="${k}" style="opacity:${on ? 1 : .35}">
+      <rect x="${X(k) - bw * .5}" y="${T}" width="${bw}" height="${h - T - B}" fill="transparent"/>
+      <rect x="${X(k) - bw * .32}" y="${Y(pv)}" width="${bw * .64}" height="${Y(0) - Y(pv)}" rx="4" fill="${on ? 'url(#gk)' : 'rgba(170,185,255,.4)'}" ${on ? 'filter="url(#gl)"' : ''} ${sel ? 'stroke="#fff" stroke-width="2"' : ''}/>
+      <text class="bl" x="${X(k)}" y="${Y(pv) - 6}" fill="${on ? '#6ee7ff' : '#8e97bd'}">${bw > 30 ? pct(pv) : ''}</text>
+      <text class="tk" x="${X(k)}" y="${h - B + 16}" text-anchor="middle" ${sel ? 'style="fill:#fff;font-weight:700"' : ''}>PC${k + 1}</text></g>`;
+  });
+  s += `<path class="cp" d="${PF.cpve.map((v, k) => `${k ? 'L' : 'M'}${X(k)},${Y(v)}`).join('')}"/>` + PF.cpve.map((v, k) => `<circle class="cpd" cx="${X(k)}" cy="${Y(v)}" r="${k === S.keep - 1 ? 5.5 : 2.6}"/>`).join('');
+  const lx = X(S.keep - 1), flip = lx > w - 120;
+  s += `<text class="cpl" x="${lx + (flip ? -10 : 10)}" y="${Y(PF.cpve[S.keep - 1]) - 8}" style="text-anchor:${flip ? 'end' : 'start'}">first ${S.keep} keep ${pct(PF.cpve[S.keep - 1])}</text>`;
+  s += `<text class="tk" x="${L}" y="${T - 10}">bars: what each PC keeps · gold line: running total</text>`;
+  svg.innerHTML = s;
+  const ld = P.cols.map((_, j) => PF.rotation[j][S.pc]), mx = Math.max(...ld.map(Math.abs));
+  $('#ldTitle').textContent = `What PC${S.pc + 1} is made of · click any bar to see another PC`;
+  $('#loadings').innerHTML = P.cols.map((_, j) => ({ j, v: ld[j] })).sort((a, b) => Math.abs(b.v) - Math.abs(a.v)).map(({ j, v }) => {
+    const wv = Math.abs(v) / mx * 50;
+    return `<div class="ld"><span>${SHORT[j]}</span><div class="tr"><i style="${v >= 0 ? `left:50%;width:${wv}%;background:#ff6fa8` : `right:50%;width:${wv}%;background:#5b8cff`}"></i></div><b>${v >= 0 ? '+' : ''}${v.toFixed(2)}</b></div>`;
+  }).join('');
+}
+$('#screeSvg').addEventListener('click', e => { const g = e.target.closest('[data-pc]'); if (!g) return; S.pc = +g.dataset.pc; Sound.select(); drawScree(); renderCtrl(); });
+
+/* ================= step 5: the map ================= */
+let BV = null;
+const ARROWLEN = P.cols.map((_, j) => Math.hypot(PF.rotation[j][0], PF.rotation[j][1]));
+const BUILD = ARROWLEN.map((v, j) => ({ v, j })).sort((a, b) => b.v - a.v).slice(0, 6).map(o => o.j);
+const COLMIN = P.cols.map((_, j) => Math.min(...P.rows.map(r => r[j]))), COLMAX = P.cols.map((_, j) => Math.max(...P.rows.map(r => r[j])));
+function groupsBy() { return S.colour === 'hcl' ? HCL : S.colour === 'km' ? P.kmeans4 : null; }
+function ellipse(m) {                       // 95% normal-theory ellipse, as fviz / ggplot2 stat_ellipse(type = "norm")
+  const n = m.length; if (n < 3) return null;
+  const mx = m.reduce((s, i) => s + PF.x[i][0], 0) / n, my = m.reduce((s, i) => s + PF.x[i][1], 0) / n;
+  let a = 0, b = 0, c = 0; m.forEach(i => { const dx = PF.x[i][0] - mx, dy = PF.x[i][1] - my; a += dx * dx; b += dx * dy; c += dy * dy; });
+  a /= n - 1; b /= n - 1; c /= n - 1;
+  const d = n - 1, rad = Math.sqrt(2 * d / 2 * (Math.pow(.05, -2 / d) - 1));
+  const l11 = Math.sqrt(a), l21 = b / l11, l22 = Math.sqrt(Math.max(c - l21 * l21, 1e-12));
+  return range(73).map(k => { const t = k / 72 * TAU, u = Math.cos(t) * rad, v = Math.sin(t) * rad; return [mx + l11 * u, my + l21 * u + l22 * v]; });
+}
+// a city's position is the sum of its 16 pulls: (scaled value) × (that column's arrow)
+function pulls(z) { return P.cols.map((_, j) => ({ j, z: z[j], dx: z[j] * PF.rotation[j][0], dy: z[j] * PF.rotation[j][1] })).sort((a, b) => Math.hypot(b.dx, b.dy) - Math.hypot(a.dx, a.dy)); }
+function buildZ() { return P.cols.map((_, j) => S.build && S.build[j] != null ? (S.build[j] - SC.center[j]) / SC.sd[j] : 0); }
+function drawMap(t) {
+  const xs = PF.x.map(r => r[0]), ys = PF.x.map(r => r[1]), g = S.mode === 'explore' ? groupsBy() : HCL;
+  const mxS = Math.max(...PF.x.map(r => Math.hypot(r[0], r[1]))), k = mxS / Math.max(...ARROWLEN) * .8;
+  const tipX = P.cols.map((_, j) => PF.rotation[j][0] * k * 1.12), tipY = P.cols.map((_, j) => PF.rotation[j][1] * k * 1.12);
+  const x0 = Math.min(...xs, ...tipX), x1 = Math.max(...xs, ...tipX), y0 = Math.min(...ys, ...tipY), y1 = Math.max(...ys, ...tipY);
+  const L = 50, R = 60, T = 30, B = 40, s = Math.min((W - L - R) / (x1 - x0), (H - T - B) / (y1 - y0)) * .94;
+  const cxp = L + (W - L - R) / 2 - (x0 + x1) / 2 * s, cyp = T + (H - T - B) / 2 + (y0 + y1) / 2 * s;
+  const uf = ease(clamp((t - 300 - S.unfoldT0) / 1800, 0, 1));
+  const X = v => cxp + v * s, Y = v => cyp - v * s * uf;
+  BV = { X, Y };
+  ctx.strokeStyle = 'rgba(140,160,255,.22)'; ctx.lineWidth = 1; ctx.setLineDash([4, 5]);
+  ctx.beginPath(); ctx.moveTo(L, Y(0)); ctx.lineTo(W - R, Y(0)); ctx.moveTo(X(0), T); ctx.lineTo(X(0), H - B); ctx.stroke(); ctx.setLineDash([]);
+  ctx.font = '600 12px Space Grotesk, sans-serif'; ctx.fillStyle = '#aab3dc'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText(`PC1 (${pct(PF.pve[0])}) →`, W - R, Y(0) + 6);
+  ctx.save(); ctx.translate(X(0) - 6, T); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(`PC2 (${pct(PF.pve[1])}) →`, 0, 0); ctx.restore();
+  const dim = S.mode !== 'explore';
+  // ellipses
+  if (g && uf > .9 && S.mode === 'explore') [1, 2, 3, 4].forEach(kk => {
+    const e = ellipse(range(N).filter(i => g[i] === kk)); if (!e) return; const colr = PAL[kk - 1];
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.beginPath(); e.forEach(([x, y], j) => j ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))); ctx.closePath();
+    ctx.fillStyle = colr; ctx.globalAlpha = .07; ctx.fill(); ctx.strokeStyle = colr; ctx.globalAlpha = .5; ctx.lineWidth = 1.4; ctx.stroke(); ctx.restore();
+  });
+  // arrows
+  BV.arrows = []; const boxes = [];
+  P.cols.forEach((_, j) => {
+    const tx = X(PF.rotation[j][0] * k), ty = Y(PF.rotation[j][1] * k), hv = S.hoverVar === j;
+    const inBuild = S.mode === 'build' && BUILD.includes(j);
+    beam(X(0), Y(0), tx, ty, hv ? '#fff' : '#ffc46b', hv ? 1.8 : 1.1, (S.hoverVar >= 0 && !hv) || (dim && !inBuild) ? .3 : .85);
+    const ang = Math.atan2(ty - Y(0), tx - X(0));
+    ctx.fillStyle = hv ? '#fff' : '#ffc46b'; ctx.globalAlpha = dim && !inBuild ? .4 : 1; ctx.beginPath(); ctx.moveTo(tx, ty);
+    ctx.lineTo(tx - 9 * Math.cos(ang - .4), ty - 9 * Math.sin(ang - .4)); ctx.lineTo(tx - 9 * Math.cos(ang + .4), ty - 9 * Math.sin(ang + .4)); ctx.fill();
+    ctx.font = '700 12px JetBrains Mono, monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = Math.cos(ang) >= 0 ? 'left' : 'right';
+    const w = ctx.measureText(SHORT[j]).width; let lx, ly, push = 12;
+    for (let tries = 0; tries < 6; tries++, push += 13) {
+      lx = tx + push * Math.cos(ang); ly = ty + push * Math.sin(ang);
+      const bx = ctx.textAlign === 'left' ? lx - 2 : lx - w - 2;
+      if (!boxes.some(o => bx < o.x + o.w && bx + w + 4 > o.x && ly - 8 < o.y + 16 && ly + 8 > o.y)) break;
+    }
+    const bx = ctx.textAlign === 'left' ? lx - 2 : lx - w - 2; boxes.push({ x: bx, y: ly - 8, w: w + 4 });
+    ctx.fillStyle = 'rgba(6,8,22,.78)'; ctx.fillRect(bx, ly - 9, w + 4, 18);
+    ctx.fillStyle = hv ? '#fff' : '#ffd9a0'; ctx.fillText(SHORT[j], lx, ly); ctx.globalAlpha = 1;
+    BV.arrows.push({ j, x: bx, y: ly, w });
+  });
+  // cities
+  const zv = S.hoverVar >= 0 ? range(N).map(i => Z[i][S.hoverVar]) : null;
+  range(N).forEach(i => {
+    let c = g ? PAL[g[i] - 1] : STAR;
+    if (zv) { const v = clamp(zv[i] / 2, -1, 1); c = v >= 0 ? `rgb(255,${Math.round(lerp(230, 111, v))},${Math.round(lerp(255, 168, v))})` : `rgb(${Math.round(lerp(230, 91, -v))},${Math.round(lerp(236, 140, -v))},255)`; }
+    ctx.globalAlpha = dim && !(S.walk && S.walk.i === i) ? .45 : 1;
+    FX.ball(ctx, null, { x: X(PF.x[i][0]), y: Y(PF.x[i][1]), r: S.hover === i ? 7 : 4.6 }, c, { glow: true });
+    ctx.globalAlpha = 1;
+  });
+  // walking a city along its pulls
+  if (S.mode === 'walk' && S.walk) {
+    const pl = pulls(Z[S.walk.i]), steps = clamp((t - S.walk.t0) / 170, 0, pl.length);
+    let px = 0, py = 0;
+    pl.forEach((p, n) => {
+      if (n >= steps) return;
+      const f = Math.min(1, steps - n), nx = px + p.dx * f, ny = py + p.dy * f;
+      beam(X(px), Y(py), X(nx), Y(ny), p.z >= 0 ? '#ff6fa8' : '#5b8cff', 1.6, .95);
+      if (n < 4 && f >= 1) label(`${p.z >= 0 ? '+' : '−'}${Math.abs(p.z).toFixed(1)} × ${SHORT[p.j]}`, X((px + nx) / 2) + 6, Y((py + ny) / 2), p.z >= 0 ? '#ffb3d1' : '#a9c2ff', 'left', 11);
+      px = nx; py = ny;
+    });
+    FX.ball(ctx, null, { x: X(px), y: Y(py), r: 6 }, '#fff', { glow: true });
+    if (steps >= pl.length) { const i = S.walk.i; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(PF.x[i][0]), Y(PF.x[i][1]), 12 + Math.sin(t / 200) * 2, 0, TAU); ctx.stroke(); label(`#${i + 1} lands here`, X(PF.x[i][0]) + 16, Y(PF.x[i][1]) - 16, '#fff'); }
+    if (Math.floor(steps) !== S.walk.last) { S.walk.last = Math.floor(steps); if (steps < pl.length) Sound.pop(S.walk.last, 0); else if (!S.walk.doneSound) { S.walk.doneSound = true; Sound.complete(); } }
+  }
+  // your own city
+  if (S.mode === 'build') {
+    const pl = pulls(buildZ()).filter(p => Math.abs(p.z) > 1e-9); let px = 0, py = 0;
+    pl.forEach(p => { const nx = px + p.dx, ny = py + p.dy; beam(X(px), Y(py), X(nx), Y(ny), p.z >= 0 ? '#ff6fa8' : '#5b8cff', 1.4, .8); px = nx; py = ny; });
+    const pulse = 9 + Math.sin(t / 220) * 2;
+    FX.glow(ctx, X(px), Y(py), 50, '#ffc46b', .7); FX.ball(ctx, null, { x: X(px), y: Y(py), r: pulse }, '#ffe2b0', { glow: true });
+    label('your city', X(px) + 14, Y(py) - 16, '#ffe2b0');
+    S.buildPos = [px, py];
+  }
+  if (S.hover >= 0) tooltip(S.hover, X(PF.x[S.hover][0]), Y(PF.x[S.hover][1]));
+  if (S.hoverVar >= 0) label(`colour = ${SHORT[S.hoverVar]}: pink above average, blue below`, 14, H - 18, '#fff');
+}
+function tooltip(i, x, y) {
+  const g = groupsBy(), lines = [`City #${i + 1}`, `PC1 ${f2(PF.x[i][0])}   PC2 ${f2(PF.x[i][1])}`];
+  if (g) lines.push(`cluster ${g[i]}`);
+  if (S.mode === 'walk') lines.push('click to walk it');
+  ctx.font = '600 12px JetBrains Mono, monospace';
+  const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 18, h = lines.length * 17 + 10;
+  let bx = x + 14, by = y - h - 8; if (bx + w > W - 4) bx = x - w - 14; if (by < 4) by = y + 12;
+  ctx.fillStyle = 'rgba(9,11,28,.95)'; ctx.strokeStyle = 'rgba(110,231,255,.45)'; ctx.lineWidth = 1; roundRect(bx, by, w, h, 8); ctx.fill(); ctx.stroke();
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; lines.forEach((l, k) => { ctx.fillStyle = k ? '#aab3dc' : '#fff'; ctx.fillText(l, bx + 9, by + 7 + k * 17); });
+}
+function hoverMap(e) {
+  if (!BV) return;
+  const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  let best = -1, bd = 16 * 16;
+  range(N).forEach(i => { const d = (BV.X(PF.x[i][0]) - px) ** 2 + (BV.Y(PF.x[i][1]) - py) ** 2; if (d < bd) { bd = d; best = i; } });
+  let v = -1;
+  if (best < 0 && BV.arrows) BV.arrows.forEach(a => { if (px >= a.x - 4 && px <= a.x + a.w + 6 && Math.abs(py - a.y) < 11) v = a.j; });
+  if (best !== S.hover) { S.hover = best; markRow(best); }
+  S.hoverVar = v; cv.style.cursor = best >= 0 || v >= 0 ? 'pointer' : 'default';
+}
+function startWalk(i) { S.walk = { i, t0: performance.now(), last: -1 }; S.hover = -1; Sound.riser(1.2); renderCtrl(); markRow(i); }
+
+/* ---------------- frame + pointer ---------------- */
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (!W || cv.classList.contains('hide')) return;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, W, H);
+  if (S.stage === 'spin') drawSpin(t);
+  else if (S.stage === 'three') draw3(t);
+  else if (S.stage === 'map') drawMap(t);
+}
+let dragging = false;
+cv.addEventListener('pointerdown', e => {
+  if (S.busy) return;
+  if (S.stage === 'spin' && !S.found) { dragging = true; cv.classList.add('drag'); cv.setPointerCapture(e.pointerId); setTheta(angleAt(e), true); }
+  else if (S.stage === 'three') {
+    dragging = true; S.idle = false; S.qAnim = null; S.last = [e.clientX, e.clientY]; cv.classList.add('drag'); cv.setPointerCapture(e.pointerId);
+    if (S.p3 === 'pick2') S.alpha = angle3(e);
+  }
+  else if (S.stage === 'map' && S.mode === 'walk') { hoverMap(e); if (S.hover >= 0) startWalk(S.hover); }
+});
+function angle3(e) { const r = cv.getBoundingClientRect(); return Math.atan2(-(e.clientY - r.top - (H / 2 + 18)), e.clientX - r.left - W / 2); }
+cv.addEventListener('pointermove', e => {
+  if (dragging && S.stage === 'spin') { setTheta(angleAt(e), true); return; }
+  if (dragging && S.stage === 'three') {
+    if (S.p3 === 'pick2') { S.alpha = angle3(e); check2(); return; }
+    const dx = e.clientX - S.last[0], dy = e.clientY - S.last[1]; S.last = [e.clientX, e.clientY];
+    S.q = Q.unit(Q.mul(Q.axis([1, 0, 0], dy * .008), Q.mul(Q.axis([0, 1, 0], dx * .008), S.q)));
+    renderCtrlSoon(); return;
+  }
+  if (S.stage === 'map') hoverMap(e);
+});
+const endDrag = () => { if (!dragging) return; dragging = false; cv.classList.remove('drag'); renderCtrl(); };
+cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+cv.addEventListener('pointerleave', () => { if (S.stage === 'map') { S.hover = -1; S.hoverVar = -1; markRow(-1); } });
+// the violet line, with any PC1 part removed: PC2 must sit at right angles to PC1 (and does, once the camera settles)
+function lineDir() {
+  const [r, u] = camRows(), b = r.map((v, i) => Math.cos(S.alpha) * v + Math.sin(S.alpha) * u[i]), p1 = PCV(0), k = dot3(b, p1);
+  return norm3(b.map((v, i) => v - k * p1[i]));
+}
+function check2() {
+  if (S.p3 !== 'pick2') return;
+  if (Math.abs(dot3(lineDir(), PCV(1))) > Math.cos(2 / DEG)) { S.p3 = 'pc2'; Sound.verdict(true); dragging = false; cv.classList.remove('drag'); renderCtrl(); renderTable(); }
+  else renderCtrlSoon();
+}
+
+/* ---------------- table ---------------- */
+function renderTable() {
+  const st = S.stage, big = st === 'three' || st === 'all' || st === 'map';
+  $('#tblTitle').textContent = big ? 'All 60 cities' : 'The 10 cities';
+  let h = '<thead><tr><th>City</th>', rows;
+  if (!big) {
+    $('#tblSub').textContent = 'hover a row to find its planet';
+    h += '<th>EDUC<small>school years</small></th><th>WWDRK<small>% white collar</small></th>' + (S.found ? '<th>PC1<small>shadow</small></th>' : '') + (S.pc2 != null ? '<th>PC2<small>shadow</small></th>' : '');
+    rows = HAND.map((i, k) => `<tr data-i="${i}"><td class="idx">#${i + 1}</td><td>${P.rows[i][iE]}</td><td>${P.rows[i][iW]}</td>${S.found ? `<td class="pc">${f2(PH.x[k][0])}</td>` : ''}${S.pc2 != null ? `<td class="pc">${f2(PH.x[k][1])}</td>` : ''}</tr>`);
+  } else if (st === 'three') {
+    $('#tblSub').textContent = '★ = the 10 from step 2';
+    h += '<th>EDUC</th><th>WWDRK</th><th>HOUS<small>% sound housing</small></th>';
+    rows = range(N).map(i => `<tr data-i="${i}" class="${HAND.includes(i) ? 'hand' : ''}"><td class="idx">#${i + 1}</td><td>${P.rows[i][iE]}</td><td>${P.rows[i][iW]}</td><td>${P.rows[i][iH]}</td></tr>`);
+  } else {
+    const g = groupsBy();
+    $('#tblSub').textContent = st === 'map' && S.mode === 'walk' ? 'click a row to walk that city' : 'each city’s shadows on PC1 and PC2';
+    h += '<th>PC1<small>shadow</small></th><th>PC2<small>shadow</small></th>' + (st === 'map' && g ? '<th>Cluster</th>' : '');
+    rows = range(N).map(i => `<tr data-i="${i}" class="${HAND.includes(i) ? 'hand' : ''}"><td class="idx">#${i + 1}</td>${[0, 1].map(c => `<td class="pc">${f2(PF.x[i][c])}</td>`).join('')}${st === 'map' && g ? `<td><span class="gpill" style="color:${PAL[g[i] - 1]}"><i class="dot" style="background:currentColor"></i>${g[i]}</span></td>` : ''}</tr>`);
+  }
+  $('#tbl').innerHTML = h + '</tr></thead><tbody>' + rows.join('') + '</tbody>';
+  markRow(S.hover);
+}
+function markRow(i) { document.querySelectorAll('#tbl tr.hl').forEach(r => r.classList.remove('hl')); if (i >= 0) { const r = document.querySelector(`#tbl tr[data-i="${i}"]`); if (r) r.classList.add('hl'); } }
+$('#tbl').addEventListener('pointerover', e => { const r = e.target.closest('tr[data-i]'); S.hover = r ? +r.dataset.i : -1; markRow(S.hover); });
+$('#tbl').addEventListener('pointerleave', () => { S.hover = -1; markRow(-1); });
+$('#tbl').addEventListener('click', e => { const r = e.target.closest('tr[data-i]'); if (r && S.stage === 'map' && S.mode === 'walk') startWalk(+r.dataset.i); });
+
+/* ---------------- stage + chrome ---------------- */
+const TITLES = {
+  data:  ['What PCA does', 'Three ideas. Start in the panel on the left.'],
+  spin:  ['Shadows between two suns', 'Drag anywhere to turn the screen. The suns turn with it, always shining straight at it.'],
+  three: ['Three columns, three directions', 'Drag to orbit the cloud of 60 cities.'],
+  all:   ['All 16 columns', '16 columns give 16 directions, sorted by how much spread each keeps.'],
+  map:   ['The best 2-D map of 16 columns', 'Every city at its PC1 and PC2 shadows. Each arrow is a column.'],
+};
+function setStage(st) {
+  S.stage = st; S.reached = Math.max(S.reached, ORDER.indexOf(st));
+  Sound.mood(st === 'data' ? 'intro' : st === 'spin' || st === 'three' ? 'build' : st === 'all' ? 'forest' : 'predict');
+  const k = ORDER.indexOf(st);
+  document.querySelectorAll('#steps li').forEach((li, i) => {
+    li.classList.toggle('active', i === k); li.classList.toggle('done', i !== k && i <= S.reached); li.classList.toggle('reach', i <= S.reached && i !== k);
+  });
+  $('#stTitle').textContent = TITLES[st][0]; $('#stSub').textContent = TITLES[st][1];
+  $('#intro').classList.toggle('hide', st !== 'data');
+  $('#cv').classList.toggle('hide', !(st === 'spin' || st === 'three' || st === 'map'));
+  $('#scree').classList.toggle('hide', st !== 'all');
+  if (st === 'map') S.unfoldT0 = performance.now();
+  Code.focus({ data: ['read'], spin: S.found ? ['rot'] : ['hand'], three: ['three'], all: ['prcomp', 'pve'], map: ['map'] }[st]);
+  renderCtrl(); renderTable();
+  requestAnimationFrame(() => { resize(); if (st === 'all') drawScree(); });
+}
+document.querySelectorAll('#steps li').forEach((li, i) => li.addEventListener('click', () => {
+  if (i <= S.reached && !S.busy && ORDER[i] !== S.stage) { Sound.ui(); setStage(ORDER[i]); }
+}));
+
+/* ---------------- control panel ---------------- */
+const kick = t => `<div class="kicker">${t}</div>`;
+function renderCtrl() {
+  const st = S.stage; let h = '';
+  if (st === 'data') {
+    h = kick('Step 1 · The idea') + `<h3>Squash 16 columns into a picture</h3>
+      <p>Our 60 cities each have 16 numbers. PCA looks for the few directions that show the cities most spread out, so a 2-D picture still tells most of the story.</p>
+      <p>Start with something you can see: <b>10 cities</b> as planets on 2 columns, <b>EDUC</b> (years of school) and <b>WWDRK</b> (% white-collar jobs). Both are scaled, so neither wins by its units.</p>
+      <div class="row"><button class="btn primary" data-act="go-spin">Light the suns →</button></div>`;
+  } else if (st === 'spin') {
+    const k1 = spinVar(S.th) / TOT2;
+    h = kick('Step 2 · Shadows') + `<h3>${S.pc2 != null ? 'PC2 catches the rest' : S.found ? 'You found PC1' : 'Make the shadows spread'}</h3>`;
+    if (!S.found) {
+      h += `<p>Two suns shine straight at the screen, one from each side. Every planet casts a shadow on it. <b>Drag to turn the screen</b> and spread the shadows as far apart as you can.</p>
+        <div class="callout">Spread kept now: <b>${pct(k1)}</b>. It is the <b>average squared distance</b> of all 10 shadows from the centre, so every planet counts, not just the two at the ends. Watch the bars at the bottom: each planet’s cyan part is its shadow².</div>
+        <p class="note">Planets far from the screen cast blurry shadows: that blur is what the screen cannot show.</p>
+        <div class="row"><button class="btn ghost sm" data-act="sweep" ${S.busy ? 'disabled' : ''}>Sweep all angles for me</button><button class="btn ghost sm" data-act="snap" ${S.busy ? 'disabled' : ''}>Show me PC1</button></div>`;
+    } else if (S.pc2 == null) {
+      h += `<p class="found">✓ This screen keeps ${pct(VMAX / TOT2)} of the spread: no angle keeps more.</p>
+        <p>That direction is <b>PC1</b>. Each planet’s shadow on it is its <b>PC1 score</b> (new column in the table).</p>
+        <p>The pink part of each bar is what PC1 missed. In 2-D only <b>one</b> direction is at right angles to PC1, so there is nothing left to choose.</p>
+        <div class="row"><button class="btn primary" data-act="pc2">Add PC2</button><button class="btn ghost sm" data-act="unfind">Spin again</button></div>
+        <p class="note" style="margin-top:12px">Why can a computer find PC1 instantly? It is an <b>eigenvector</b>. <a href="../eigenvectors/" style="color:var(--accent)">See how →</a></p>`;
+    } else {
+      h += `<p class="found">PC1 ${pct(VMAX / TOT2)} + PC2 ${pct(1 - VMAX / TOT2)} = 100%</p>
+        <p>PC2 sits at right angles to PC1, with its own pair of suns. Its shadows catch exactly the part PC1 lost: every bar is now fully coloured.</p>
+        <div class="lbl">Light up</div>
+        <div class="toggle"><button class="${S.light === 'pc1' ? 'on' : ''}" data-act="light" data-v="pc1">PC1’s suns</button><button class="${S.light === 'pc2' ? 'on' : ''}" data-act="light" data-v="pc2">PC2’s suns</button></div>
+        <p class="note">Two columns in, two PCs out: nothing is lost, the axes are just turned. The saving comes when we keep fewer PCs than columns.</p>
+        <div class="row"><button class="btn primary" data-act="go-three">Add a third column →</button></div>`;
+    }
+  } else if (st === 'three') {
+    h = kick('Step 3 · 3D') + threeCtrl();
+  } else if (st === 'all') {
+    h = kick('Step 4 · All 16 columns') + `<h3>Sixteen directions, best first</h3>
+      <p>Nobody can turn a screen in 16-D by hand, but the recipe is the same as in 3-D: find the best direction, then the best one at right angles to it, and so on, 16 times.</p>
+      <div class="lbl">Keep the first m PCs</div>
+      <div class="kbig"><button class="btn sm" data-act="keep" data-d="-1" ${S.keep <= 1 ? 'disabled' : ''} aria-label="fewer">−</button><b>${S.keep}</b><button class="btn sm" data-act="keep" data-d="1" ${S.keep >= 16 ? 'disabled' : ''} aria-label="more">+</button><span>keep <b style="color:#ffc46b">${pct(PF.cpve[S.keep - 1])}</b> of the spread</span></div>
+      <p>PC1 alone keeps ${pct(PF.pve[0])}, less than in 2-D or 3-D: these 16 columns point in many different directions. A 2-D picture (PC1 + PC2) still keeps ${pct(PF.cpve[1])}.</p>
+      <p>Each PC is a <b>recipe</b> of the 16 columns. <b>Click a bar</b> to read it. PC1 is high in poor, rainy, hot cities with high mortality, and low where schooling and housing are high.</p>
+      <div class="row"><button class="btn primary" data-act="go-map">Draw the map →</button></div>`;
+  } else if (st === 'map') {
+    h = kick('Step 5 · The map') + `<h3>${S.mode === 'walk' ? 'Walk a city' : S.mode === 'build' ? 'Build a city' : 'Read the map'}</h3>
+      <div class="toggle"><button class="${S.mode === 'explore' ? 'on' : ''}" data-act="mode" data-v="explore">Explore</button><button class="${S.mode === 'walk' ? 'on' : ''}" data-act="mode" data-v="walk">Walk a city</button><button class="${S.mode === 'build' ? 'on' : ''}" data-act="mode" data-v="build">Build a city</button></div>`;
+    if (S.mode === 'explore') {
+      const g = groupsBy(), sizes = g ? [1, 2, 3, 4].map(k => g.filter(v => v === k).length) : [];
+      h += `<p>Each dot is a city, placed by its shadows on PC1 and PC2. Each gold arrow is a column: cities out along an arrow score high on that column. <b>Hover an arrow’s name</b> to colour every city by it.</p>
+        <div class="lbl">Colour the cities by</div>
+        <div class="toggle"><button class="${S.colour === 'hcl' ? 'on' : ''}" data-act="colour" data-v="hcl">Clusters (hclust)</button><button class="${S.colour === 'km' ? 'on' : ''}" data-act="colour" data-v="km">Clusters (k-means)</button><button class="${S.colour === 'none' ? 'on' : ''}" data-act="colour" data-v="none">None</button></div>
+        ${g ? `<div class="sizes">${sizes.map((n, k) => `<span style="color:${PAL[k]}">${k + 1}: ${n} cities</span>`).join('')}</div>` : ''}
+        <p class="note">${S.colour === 'hcl' ? 'The 4 clusters you cut in the clustering explainer. They were found in all 16 columns; the map only shows them.' : S.colour === 'km' ? 'The script’s k-means clusters (from R, set.seed(1)). Nearly the same groups.' : 'Without colours, can you still see the groups?'} Ellipses hold about 95% of each cluster.</p>
+        <p class="note">Arrows that point the same way move together (EDUC, WWDRK, HOUS). Arrows at right angles are unrelated: HC and NOX are nearly at right angles to MORT, so pollution potential does not track mortality here.</p>`;
+    } else if (S.mode === 'walk') {
+      const i = S.walk ? S.walk.i : null;
+      h += `<p>How does a city get its place? Start at the centre (the average city). For each column, step along its arrow by how far the city is <b style="color:#ff9ec4">above average</b>, or backwards if it is <b style="color:#a9c2ff">below</b>. After 16 steps you land exactly on the city.</p>
+        <p><b>Click any city</b> on the map or in the table.</p>`;
+      if (i != null) {
+        const pl = pulls(Z[i]), mx = Math.max(...pl.map(p => Math.abs(p.z)));
+        h += `<div class="lbl">City #${i + 1}: how far above or below average, longest step first</div><div class="contrib">${pl.map(p => `<div class="cb"><span>${SHORT[p.j]}</span><div class="tr"><i style="${p.z >= 0 ? `left:50%;width:${Math.abs(p.z) / mx * 50}%;background:#ff6fa8` : `right:50%;width:${Math.abs(p.z) / mx * 50}%;background:#5b8cff`}"></i></div><b>${p.z >= 0 ? '+' : '−'}${Math.abs(p.z).toFixed(1)} sd</b></div>`).join('')}</div>
+          <div class="row"><button class="btn ghost sm" data-act="rewalk">Walk it again</button></div>`;
+      }
+    } else {
+      h += `<p>Invent a city with the 6 columns that pull hardest on this map (the rest stay average) and watch where it lands. Which cluster does it join?</p>`;
+      h += BUILD.map(j => { const v = S.build[j]; return `<div class="sl"><b>${SHORT[j]}</b><input type="range" min="${COLMIN[j]}" max="${COLMAX[j]}" step="${(COLMAX[j] - COLMIN[j]) / 100}" value="${v}" data-j="${j}" aria-label="${SHORT[j]}"><span data-v="${j}">${fmtv(v)}</span></div>`; }).join('');
+      h += `<p class="note" id="nearest">${nearestText()}</p><div class="row"><button class="btn ghost sm" data-act="avg">Back to average</button></div>`;
+    }
+    h += `<div class="row"><a class="btn ghost sm" href="../hierarchical-clustering/#cut">← The clusters</a><a class="btn ghost sm" href="../eigenvectors/">Eigenvectors →</a></div>`;
+  }
+  $('#ctrl').innerHTML = h;
+}
+const fmtv = v => Math.abs(v) >= 100 ? Math.round(v) : (+v).toFixed(1);
+function nearestText() {
+  const pos = pulls(buildZ()).reduce((p, q) => [p[0] + q.dx, p[1] + q.dy], [0, 0]);
+  const cent = [1, 2, 3, 4].map(k => { const m = range(N).filter(i => HCL[i] === k); return [m.reduce((s, i) => s + PF.x[i][0], 0) / m.length, m.reduce((s, i) => s + PF.x[i][1], 0) / m.length]; });
+  let best = 0, bd = Infinity; cent.forEach((c, k) => { const d = Math.hypot(c[0] - pos[0], c[1] - pos[1]); if (d < bd) { bd = d; best = k; } });
+  return `Your city sits closest to <b style="color:${PAL[best]}">cluster ${best + 1}</b> on this map.`;
+}
+function threeCtrl() {
+  if (S.p3 === 'pick1') {
+    const [r] = camRows(), v = var3(r) / TOT3;
+    return `<h3>Find PC1 in 3-D</h3>
+      <p>We add <b>HOUS</b> (% sound housing) and use all 60 cities. The cyan line across the screen is your candidate. <b>Drag to orbit the cloud</b> until the shadows on the line spread the most.</p>
+      <div class="callout">This line keeps <b>${pct(v)}</b> of the spread.</div>
+      <div class="row"><button class="btn primary" data-act="lock1">Lock in this line</button></div>`;
+  }
+  if (S.p3 === 'look1') return `<h3>Find PC1 in 3-D</h3><p class="found">Your line kept ${pct(S.lock1)}; the best possible, PC1, keeps ${pct(PVE3[0])}${S.lock1 > PVE3[0] - .01 ? '. Spot on!' : '. Snapped to PC1.'}</p>
+      <p>Now <b>look straight down PC1</b>. Everything PC1 explains collapses into a point, and you see only what is left.</p>
+      <div class="row"><button class="btn primary" data-act="look1">Look along PC1</button></div>`;
+  if (S.p3 === 'pick2') {
+    const v = var3(lineDir()) / TOT3;
+    return `<h3>Now pick PC2</h3>
+      <p>PC1 points straight at you. What you see is the spread PC1 could not catch. <b>Drag to turn the violet line</b> and catch as much of it as you can.</p>
+      <div class="callout">The violet line adds <b>${pct(v)}</b> (best possible: ${pct(PVE3[1])}).</div>
+      <div class="row"><button class="btn ghost sm" data-act="snap2">Show me PC2</button></div>`;
+  }
+  if (S.p3 === 'pc2') return `<h3>PC2 found</h3><p class="found">PC1 ${pct(PVE3[0])} + PC2 ${pct(PVE3[1])} = ${pct(PVE3[0] + PVE3[1])}</p>
+      <p>One direction is left: the one at right angles to both PC1 and PC2. There is no choice to make.</p>
+      <div class="row"><button class="btn primary" data-act="pc3">Add PC3</button></div>`;
+  const v = S.view ? VIEWS[S.view] : null;
+  return `<h3>Three PCs: ${pct(PVE3[0])} + ${pct(PVE3[1])} + ${pct(PVE3[2])}</h3>
+    <p>PC3 holds only ${pct(PVE3[2])}: this cloud is a flat <b>pancake</b>. Try each view:</p>
+    <div class="views">${Object.entries(VIEWS).map(([k, o]) => `<button class="vcard ${S.view === k ? 'on' : ''}" data-act="view" data-v="${k}"><b>${o.name}</b><span>${pct(1 - var3(Q.mat(o.q())[2]) / TOT3)} kept</span></button>`).join('')}</div>
+    ${v ? `<div class="callout">${v.why}</div>` : '<p class="note">Or keep dragging to orbit freely.</p>'}
+    <div class="row"><button class="btn primary" data-act="go-all">All 16 columns →</button></div>`;
+}
+$('#ctrl').addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const a = b.dataset.act;
+  if (a === 'go-spin') { Sound.unlock(); setStage('spin'); }
+  else if (a === 'sweep') await sweep();
+  else if (a === 'snap') { await animTheta(TH_STAR); foundIt(); }
+  else if (a === 'unfind') { S.found = false; S.pc2 = null; S.light = 'pc1'; S.seen.fill(0); setTheta(TH_STAR + 1.1); Sound.ui(); renderCtrl(); renderTable(); }
+  else if (a === 'pc2') { S.pc2 = 0; S.pc2T0 = performance.now(); S.light = 'pc2'; Sound.add(); renderCtrl(); renderTable(); }
+  else if (a === 'light') { S.light = b.dataset.v; Sound.select(); renderCtrl(); }
+  else if (a === 'go-three') { S.q = camLook([0, 0, 1], [1, 0, 0]); S.idle = true; S.p3 = 'pick1'; setStage('three'); }
+  else if (a === 'lock1') {
+    const [r] = camRows(); S.lock1 = var3(r) / TOT3; S.p3 = 'look1'; Sound.select();
+    animQ(camLook(PCV(2), PCV(0)), 1400, () => Sound.complete()); renderCtrl();
+  }
+  else if (a === 'look1') {
+    S.p3 = 'pick2'; S.alpha = 25 / DEG; Sound.riser(1.4);
+    animQ(camLook(PCV(0), PCV(2)), 1600, () => renderCtrl()); renderCtrl();
+  }
+  else if (a === 'snap2') {
+    const [r, u] = camRows(), p2 = PCV(1); let target = Math.atan2(dot3(p2, u), dot3(p2, r)); const from = S.alpha;
+    let d = target - from; while (d > Math.PI / 2) d -= Math.PI; while (d < -Math.PI / 2) d += Math.PI;
+    S.busy = true; await animate(1100, u2 => { S.alpha = from + d * ease(u2); }); S.busy = false; check2();
+  }
+  else if (a === 'pc3') { S.p3 = 'done'; S.view = 'best'; Sound.verdict(true); animQ(VIEWS.best.q(), 1500); renderCtrl(); }
+  else if (a === 'view') { S.view = b.dataset.v; Sound.select(); animQ(VIEWS[S.view].q(), 1400); renderCtrl(); }
+  else if (a === 'go-all') setStage('all');
+  else if (a === 'keep') { S.keep = clamp(S.keep + +b.dataset.d, 1, 16); Sound.tick(S.keep); drawScree(); renderCtrl(); }
+  else if (a === 'go-map') { setStage('map'); Sound.riser(1.6); }
+  else if (a === 'colour') { S.colour = b.dataset.v; Sound.select(); renderCtrl(); renderTable(); }
+  else if (a === 'mode') {
+    S.mode = b.dataset.v; S.hoverVar = -1; Sound.select();
+    if (S.mode === 'build' && !S.build) { S.build = {}; BUILD.forEach(j => S.build[j] = SC.center[j]); }
+    if (S.mode === 'walk' && !S.walk) startWalk(range(N).reduce((b, i) => Math.hypot(...PF.x[i].slice(0, 2)) > Math.hypot(...PF.x[b].slice(0, 2)) ? i : b, 0));
+    renderCtrl(); renderTable();
+  }
+  else if (a === 'rewalk' && S.walk) startWalk(S.walk.i);
+  else if (a === 'avg') { BUILD.forEach(j => S.build[j] = SC.center[j]); Sound.ui(); renderCtrl(); }
+});
+$('#ctrl').addEventListener('input', e => {
+  const j = e.target.dataset && e.target.dataset.j; if (j == null) return;
+  S.build[+j] = +e.target.value;
+  const out = document.querySelector(`[data-v="${j}"]`); if (out) out.textContent = fmtv(+e.target.value);
+  requestAnimationFrame(() => { const n = $('#nearest'); if (n) n.innerHTML = nearestText(); });
+  Sound.tick(Math.round((+e.target.value - COLMIN[j]) / (COLMAX[j] - COLMIN[j]) * 10));
+});
+
+/* ---------------- boot ---------------- */
+Sound.bindButtons({ music: '#musicBtn', sfx: '#soundBtn' });
+$('#resetBtn').addEventListener('click', () => location.reload());
+new ResizeObserver(resize).observe($('#stageB'));
+// deep links (#spin, #three, #all, #map) jump straight to a step with the earlier ones done
+(function jump() {
+  const k = ORDER.indexOf(location.hash.slice(1));
+  if (k >= 2) { S.found = true; S.th = TH_STAR; S.seen.fill(1); S.pc2 = 1; S.pc2T0 = -1e9; S.light = 'pc2'; }
+  if (k === 2) { S.q = camLook([0, 0, 1], [1, 0, 0]); }
+  if (k >= 1) { S.reached = k; setStage(ORDER[k]); } else setStage('data');
+})();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

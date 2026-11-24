@@ -236,11 +236,11 @@ a.btn{text-decoration:none;display:inline-block}
         </div>
         <div class="vs"><b>Unlike a random forest:</b> no bootstrap sample and no random features (XGBoost's defaults use every row and every feature), and the trees are <b>not independent</b>. Tree 2 can't be built until Tree 1 is finished, because it learns from Tree 1's mistakes.</div>
         <div class="mathgrid">
-          <div class="mcard"><div class="mlab">Start: everyone gets the mean</div><div data-tex="\tip{yhat}{\hat{y}_{\tip{i}{i}}^{(0)}} = \tip{ybar}{\bar{y}} = 55.4" data-plain="ŷ_i⁽⁰⁾ = ȳ = 55.4"></div></div>
-          <div class="mcard"><div class="mlab">Residual: what is still wrong</div><div data-tex="\tip{r}{r_{\tip{i}{i}}} = \tip{y}{y_{\tip{i}{i}}} - \tip{yhat}{\hat{y}_{\tip{i}{i}}^{(\tip{t}{t}-1)}}" data-plain="r_i = y_i − ŷ_i⁽ᵗ⁻¹⁾"></div></div>
+          <div class="mcard"><div class="mlab">Start: everyone gets the mean</div><div data-tex="\tip{yhat0}{\hat{y}_{\tip{i}{i}}^{(0)}} = \tip{ybar}{\bar{y}} = 55.4" data-plain="ŷ_i⁽⁰⁾ = ȳ = 55.4"></div></div>
+          <div class="mcard"><div class="mlab">Residual: what is still wrong</div><div data-tex="\tip{r}{r_{\tip{i}{i}}} = \tip{y}{y_{\tip{i}{i}}} - \tip{yhatp}{\hat{y}_{\tip{i}{i}}^{(\tip{t}{t}-1)}}" data-plain="r_i = y_i − ŷ_i⁽ᵗ⁻¹⁾"></div></div>
           <div class="mcard"><div class="mlab">Leaf weight</div><div data-tex="\tip{w}{w} = \frac{\tip{S}{S}}{\tip{n}{n} + \tip{lambda}{\lambda}}, \qquad \tip{S}{S} = \sum_{\tip{i}{i}\,\in\,\text{leaf}} \tip{r}{r_{i}}" data-plain="w = S / (n + λ),  S = Σ r_i over the leaf"></div></div>
-          <div class="mcard"><div class="mlab">Add the tree, shrunk</div><div data-tex="\tip{yhat}{\hat{y}_{\tip{i}{i}}^{(\tip{t}{t})}} = \tip{yhat}{\hat{y}_{\tip{i}{i}}^{(\tip{t}{t}-1)}} + \tip{eta}{\eta}\; \tip{w}{w}_{\tip{leaf}{\mathrm{leaf}_t(i)}}" data-plain="ŷ_i⁽ᵗ⁾ = ŷ_i⁽ᵗ⁻¹⁾ + η · w_leaf"></div></div>
-          <div class="mcard wide"><div class="mlab">Gain of a split (made only if Gain &gt; γ)</div><div data-tex="\tip{gain}{\text{Gain}} = \frac{\tip{SL}{S_L^{2}}}{\tip{nL}{n_L}+\tip{lambda}{\lambda}} + \frac{\tip{SR}{S_R^{2}}}{\tip{nR}{n_R}+\tip{lambda}{\lambda}} - \frac{\tip{S}{S^{2}}}{\tip{n}{n}+\tip{lambda}{\lambda}} \;>\; \tip{gamma}{\gamma}" data-plain="Gain = S_L²/(n_L+λ) + S_R²/(n_R+λ) − S²/(n+λ),  split if Gain > γ"></div></div>
+          <div class="mcard"><div class="mlab">Add the tree, shrunk</div><div data-tex="\tip{yhatt}{\hat{y}_{\tip{i}{i}}^{(\tip{t}{t})}} = \tip{yhatp}{\hat{y}_{\tip{i}{i}}^{(\tip{t}{t}-1)}} + \tip{eta}{\eta}\; \tip{w}{w}_{\tip{leaf}{\mathrm{leaf}_t(i)}}" data-plain="ŷ_i⁽ᵗ⁾ = ŷ_i⁽ᵗ⁻¹⁾ + η · w_leaf"></div></div>
+          <div class="mcard wide"><div class="mlab">Gain of a split (made only if Gain &gt; γ)</div><div data-tex="\tip{gain}{\text{Gain}} = \frac{\tip{SL}{S_L^{2}}}{\tip{nL}{n_L}+\tip{lambda}{\lambda}} + \frac{\tip{SR}{S_R^{2}}}{\tip{nR}{n_R}+\tip{lambda}{\lambda}} - \frac{\tip{S}{S}^{2}}{\tip{n}{n}+\tip{lambda}{\lambda}} \;>\; \tip{gamma}{\gamma}" data-plain="Gain = S_L²/(n_L+λ) + S_R²/(n_R+λ) − S²/(n+λ),  split if Gain > γ"></div></div>
         </div>
         <p class="mhint"><b>Hover or tap any symbol</b> to see what it means.</p>
       </div>
@@ -254,9 +254,17 @@ a.btn{text-decoration:none;display:inline-block}
 </main>
 
 <script>window.MATH_TIPS = {
- "yhat": {
-  "name": "Prediction ŷᵢ⁽ᵗ⁾",
-  "def": "The model’s prediction for row i after t trees. The superscript (0) means before any tree exists."
+ "yhat0": {
+  "name": "Starting prediction ŷᵢ⁽⁰⁾",
+  "def": "Every row’s prediction before any tree exists: the mean of the target."
+ },
+ "yhatp": {
+  "name": "Previous prediction ŷᵢ⁽ᵗ⁻¹⁾",
+  "def": "Row i’s prediction after the first t − 1 trees, before tree t is added."
+ },
+ "yhatt": {
+  "name": "New prediction ŷᵢ⁽ᵗ⁾",
+  "def": "Row i’s prediction after tree t is added: the previous prediction plus a shrunk step."
  },
  "i": {
   "name": "Row i",

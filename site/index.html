@@ -55,6 +55,24 @@ const thumbs = {
     ${i < 2 ? `<path class="e" d="M${x + 40} 64 L${x + 70} 64" marker-end="url(#ar)"/>` : ''}`).join('')}
     <defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor" style="color:var(--muted)"/></marker></defs>
     <text x="150" y="132" text-anchor="middle" style="font:600 12px var(--mono);fill:var(--muted)">+ η·f₁ + η·f₂ + η·f₃ …</text></svg>`,
+  hclust: `<svg viewBox="0 0 300 150">
+    <path class="e" d="M40 128V104H64V128 M52 104V80H100V96 M88 128V96H112V128 M190 128V112H210V128 M230 128V112H250V128 M200 112V92H240V112 M76 80V46H220V92"/>
+    ${[40, 64, 88, 112, 190, 210, 230, 250].map((x, i) => `<circle class="${i < 4 ? 'a' : 'f'}" cx="${x}" cy="128" r="5"/>`).join('')}
+    <line x1="24" x2="276" y1="68" y2="68" style="stroke:#ff6fa8;stroke-width:2;filter:drop-shadow(0 0 5px #ff6fa8)"/>
+    <text x="276" y="60" text-anchor="end" style="font:700 11px var(--mono);fill:#ffb3d1">k = 2</text></svg>`,
+  pca: `<svg viewBox="0 0 300 150">
+    <line x1="40" y1="128" x2="262" y2="22" style="stroke:var(--accent);stroke-width:2.5;filter:drop-shadow(0 0 6px var(--accent))"/>
+    ${[[78, 86], [104, 110], [132, 72], [158, 98], [176, 58], [200, 74], [224, 44], [120, 94]].map(([x, y]) => {
+      const t = ((x - 40) * 222 + (y - 128) * -106) / (222 * 222 + 106 * 106), fx = 40 + 222 * t, fy = 128 - 106 * t;
+      return `<line x1="${x}" y1="${y}" x2="${fx}" y2="${fy}" style="stroke:#ff6fa8;stroke-width:1.3;stroke-dasharray:3 3"/><circle class="n" cx="${x}" cy="${y}" r="5" style="fill:#e9ecff"/><circle cx="${fx}" cy="${fy}" r="3" class="a"/>`;
+    }).join('')}
+    <text x="262" y="44" text-anchor="end" style="font:700 11px var(--mono);fill:var(--accent)">PC1</text></svg>`,
+  eigen: `<svg viewBox="0 0 300 150">
+    <ellipse cx="150" cy="78" rx="92" ry="28" transform="rotate(-28 150 78)" style="fill:none;stroke:#ff6fa8;stroke-opacity:.5"/>
+    <circle cx="150" cy="78" r="40" style="fill:none;stroke:var(--muted);stroke-dasharray:3 4;opacity:.6"/>
+    <line x1="40" y1="136" x2="260" y2="20" style="stroke:#4dffb4;stroke-width:2;filter:drop-shadow(0 0 5px #4dffb4)"/>
+    <line x1="150" y1="78" x2="185" y2="59" style="stroke:var(--accent);stroke-width:3"/><line x1="150" y1="78" x2="230" y2="36" style="stroke:#ff6fa8;stroke-width:2;stroke-dasharray:5 3"/>
+    <text x="262" y="42" text-anchor="end" style="font:700 11px var(--mono);fill:#4dffb4">A·v = λv</text></svg>`,
 };
 const EXPLAINERS = [
   { href: 'random-forest/', title: 'Random Forest by hand', thumb: 'forest',
@@ -63,6 +81,15 @@ const EXPLAINERS = [
   { href: 'xgboost/', title: 'XGBoost by hand', thumb: 'boost',
     text: 'Start from the mean, build 3 trees on the residuals yourself, boost 97 more with the default settings, and watch an outlier get fitted. Predictions add up, plinko-style.',
     tags: ['regression', 'boosting', 'residuals'] },
+  { href: 'hierarchical-clustering/', title: 'Hierarchical clustering by hand', thumb: 'hclust',
+    text: 'Merge 10 cities yourself by Ward’s rule, watch hclust merge all 60, cut the dendrogram with a laser, then see what skipping scale() does.',
+    tags: ['unsupervised', 'ward.D2', 'dendrogram'] },
+  { href: 'pca/', title: 'PCA by hand', thumb: 'pca',
+    text: 'Turn a screen between two suns until the planets’ shadows spread widest, pick PC1, PC2 and PC3 in 3-D, then walk a city along the arrows of a 16-column map.',
+    tags: ['unsupervised', 'prcomp', 'biplot'] },
+  { href: 'eigenvectors/', title: 'Eigenvectors by hand', thumb: 'eigen',
+    text: 'Watch a matrix stretch arrows, hunt for the ones it does not turn, see that their stretch is PCA’s spread, then push any arrow until it swings to PC1.',
+    tags: ['linear algebra', 'eigen', 'power method'] },
 ];
 document.getElementById('grid').innerHTML = EXPLAINERS.map(e => `
   <a class="card" href="${e.href}">
