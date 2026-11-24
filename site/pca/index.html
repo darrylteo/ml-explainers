@@ -239,6 +239,7 @@ const HAND = P.hand.map(r => r - 1);
 const PH = U.prcomp(HAND.map(i => [Z[i][iE], Z[i][iW]]), P.rSigns.hand);
 const HC = HAND.map(i => [Z[i][iE] - PH.center[0], Z[i][iW] - PH.center[1]]);   // centred, as prcomp sees them
 const TOT2 = PH.sdev.reduce((s, v) => s + v * v, 0);
+const FAR = HC.reduce((b, p, k) => Math.hypot(...p) > Math.hypot(...HC[b]) ? k : b, 0);   // the planet the triangle starts on
 const lineAng = v => ((Math.atan2(v[1], v[0]) % Math.PI) + Math.PI) % Math.PI;
 const TH_STAR = lineAng([PH.rotation[0][0], PH.rotation[1][0]]);
 const T3 = Z.map(r => [r[iE], r[iW], r[iH]]);
@@ -584,6 +585,24 @@ function drawScene(t, sc) {
     ctx.globalAlpha = 1;
   });
   if (sc.ghost != null) { const gc = Math.cos(sc.ghost), gs = Math.sin(sc.ghost), D = Math.min(W * .4, (L.bot - L.top) * .42); const sg = gs > 0 ? -1 : 1; label(sc.ghostLab, L.cx + sg * gc * D, L.cy - sg * gs * D + 16, '#fff', 'center'); }   // on the lower end, clear of the meter
+  if (sc.tri && k3 >= 1) {
+    // Pythagoras for one planet: d from the centre, z along the screen (its shadow), r straight off the screen
+    const hk = sc.ids.indexOf(S.hover), kk = sc.triK = hk >= 0 ? hk : FAR;
+    const [x, y] = sc.pts[kk], z = c * x + s * y, r = -x * s + y * c;
+    const ox = L.cx, oy = L.cy, px = ox + x * L.s, py = oy - y * L.s, fx = ox + z * c * L.s, fy = oy - z * s * L.s;
+    const zc = good ? sc.colFound : sc.colA, seg = (x1, y1, x2, y2, col, dash) => { ctx.strokeStyle = col; ctx.setLineDash(dash); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+    ctx.save(); ctx.globalAlpha = .7; ctx.lineWidth = 2;
+    seg(ox, oy, px, py, '#ffffff', [2, 5]);
+    seg(fx, fy, px, py, '#ff6fa8', [5, 4]);
+    ctx.lineWidth = 3; seg(ox, oy, fx, fy, zc, []);
+    const ux = Math.sign(z || 1) * c, uy = -Math.sign(z || 1) * s, vx = (px - fx) / (Math.hypot(px - fx, py - fy) || 1), vy = (py - fy) / (Math.hypot(px - fx, py - fy) || 1), q = 8;
+    ctx.lineWidth = 1.2; ctx.setLineDash([]); ctx.strokeStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(fx - ux * q, fy - uy * q); ctx.lineTo(fx - ux * q + vx * q, fy - uy * q + vy * q); ctx.lineTo(fx + vx * q, fy + vy * q); ctx.stroke();
+    ctx.globalAlpha = .9; ctx.font = '700 13px JetBrains Mono, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tag = (t, x1, y1, x2, y2, col, off) => { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, l = Math.hypot(x2 - x1, y2 - y1) || 1; ctx.fillStyle = col; ctx.fillText(t, mx - (y2 - y1) / l * off, my + (x2 - x1) / l * off); };
+    tag('z', ox, oy, fx, fy, zc, r > 0 ? 12 : -12); tag('r', fx, fy, px, py, '#ff9ec4', z > 0 ? -12 : 12); tag('d', ox, oy, px, py, '#ffffff', r > 0 ? -12 : 12);
+    ctx.restore();
+    label(`#${sc.ids[kk] + 1}: d² ${(x * x + y * y).toFixed(2)} = z² ${(z * z).toFixed(2)} + r² ${(r * r).toFixed(2)}`, W - 12, 92, '#c9d0f5', 'right');
+  } else sc.triK = -1;
   if (sc.centre) { FX.glow(ctx, L.cx, L.cy, 40, C1, .9); label(sc.centre, L.cx + 14, L.cy + 18, C1); }
   if (sc.ids) placeLabels(sc.pts.map(([x, y], k) => ({ x: L.cx + x * L.s, y: L.cy - y * L.s, t: '#' + (sc.ids[k] + 1), on: S.hover === sc.ids[k] })), [{ x: 0, y: 0, w: 320, h: 84 }]);
   ctx.restore();
@@ -600,13 +619,13 @@ function drawStrip(L, sc, p2) {
   ctx.font = '700 10.5px JetBrains Mono, monospace'; ctx.fillStyle = '#aab3dc'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   const c = Math.cos(sc.th), s = Math.sin(sc.th), good = sc.found || sc.near;
   if (sc.bars) {
-    ctx.fillText(narrow ? 'EACH PLANET' : 'EACH PLANET: shadow² + distance² stays fixed', 16, H - L.strip + 9);
+    ctx.fillText(narrow ? 'EACH PLANET' : 'EACH PLANET: z² + r² = d² (fixed)', 16, H - L.strip + 9);
     const d2 = sc.pts.map(([x, y]) => x * x + y * y), mx = Math.max(...d2), bw = (split - 30) / sc.pts.length;
     sc.pts.forEach(([x, y], k) => {
       const z2 = (c * x + s * y) ** 2, bx = 16 + k * bw, hh = (y0 - 14 - y1) * d2[k] / mx, base = y0 - 14, hz = hh * z2 / d2[k];
       ctx.fillStyle = good ? sc.colFound : sc.colA; ctx.fillRect(bx + 2, base - hz, bw - 5, hz);
       ctx.fillStyle = p2 > 0 ? sc.colB : 'rgba(255,111,168,.85)'; ctx.globalAlpha = p2 > 0 ? .4 + .6 * p2 : 1; ctx.fillRect(bx + 2, base - hh, bw - 5, hh - hz); ctx.globalAlpha = 1;
-      if (S.hover === sc.ids[k]) { ctx.strokeStyle = '#fff'; ctx.strokeRect(bx + 1.5, base - hh - .5, bw - 4, hh + 1); }
+      if (S.hover === sc.ids[k] || sc.triK === k) { ctx.strokeStyle = '#fff'; ctx.strokeRect(bx + 1.5, base - hh - .5, bw - 4, hh + 1); }
       ctx.fillStyle = '#8e97bd'; ctx.font = '600 9.5px JetBrains Mono, monospace'; ctx.textAlign = 'center'; ctx.fillText('#' + (sc.ids[k] + 1), bx + bw / 2, base + 2);
     });
   }
@@ -627,7 +646,7 @@ function drawStrip(L, sc, p2) {
 function spinScene(t) {
   const p2 = S.pc2 == null ? 0 : ease(clamp((t - S.pc2T0) / 900, 0, 1));
   return { pts: HC, ids: HAND, R: 11, slices: 14, th: S.th, near: S.near, found: S.found, p2, light: S.light === 'pc2' ? 'b' : 'a',
-    ghost: S.found && S.own1 ? TH_STAR : null, ghostLab: 'best: PC1',
+    ghost: S.found && S.own1 ? TH_STAR : null, ghostLab: 'best: PC1', tri: S.pc2 == null,
     colA: '#6ee7ff', colFound: C1, colB: C2, varAt: spinVar, total: TOT2, best: TH_STAR, seen: S.seen, bars: true, axes: ['EDUC →', '↑ WWDRK'],
     meter: p => p > 0 ? meter(12, 10, Math.min(300, W * .55), [{ v: spinVar(S.th), col: C1, lab: 'PC1' }, { v: (TOT2 - spinVar(S.th)) * p, col: C2, lab: 'PC2' }], TOT2, 'SPREAD KEPT')
       : meter(12, 10, Math.min(300, W * .55), [{ v: spinVar(S.th), col: S.found || S.near ? C1 : '#6ee7ff', lab: 'screen' }], TOT2, 'SPREAD KEPT BY THE SCREEN') };
@@ -955,6 +974,11 @@ cv.addEventListener('pointermove', e => {
     S.q = Q.unit(Q.mul(Q.axis([1, 0, 0], dy * .008), Q.mul(Q.axis([0, 1, 0], dx * .008), S.q)));
     renderCtrlSoon(); return;
   }
+  if (S.stage === 'spin' && SP && !dragging) {
+    const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top; let best = -1, bd = 18;
+    HC.forEach(([x, y], k) => { const d = Math.hypot(SP.cx + x * SP.s - mx, SP.cy - y * SP.s - my); if (d < bd) { bd = d; best = HAND[k]; } });
+    if (best !== S.hover) { S.hover = best; markRow(best); }
+  }
   if (S.stage === 'map') hoverMap(e);
 });
 const endDrag = () => { if (!dragging) return; dragging = false; cv.classList.remove('drag'); renderCtrl(); };
@@ -967,7 +991,7 @@ function renderTable() {
   $('#tblTitle').textContent = big ? 'All 60 cities' : 'The 10 cities';
   let h = '<thead><tr><th>City</th>', rows;
   if (!big) {
-    $('#tblSub').textContent = 'hover a row to find its planet';
+    $('#tblSub').textContent = 'hover a row or a planet';
     h += '<th>EDUC<small>school years</small></th><th>WWDRK<small>% white collar</small></th>' + (S.found ? '<th>PC1<small>shadow</small></th>' : '') + (S.pc2 != null ? '<th>PC2<small>shadow</small></th>' : '');
     rows = HAND.map((i, k) => `<tr data-i="${i}"><td class="idx">#${i + 1}</td><td>${P.rows[i][iE]}</td><td>${P.rows[i][iW]}</td>${S.found ? `<td class="pc">${f2(scores2(k)[0])}</td>` : ''}${S.pc2 != null ? `<td class="pc">${f2(scores2(k)[1])}</td>` : ''}</tr>`);
   } else if (st === 'three') {
@@ -1035,7 +1059,7 @@ function renderCtrl() {
       h += `<h3>Make the shadows spread</h3>
         <p>Two suns shine straight at the screen, one from each side. Every planet casts a shadow on it. <b>Drag to turn the screen</b> and spread the shadows as far apart as you can.</p>
         <div class="callout ${S.near ? 'win' : ''}">${S.near ? `<b>That’s the widest!</b> No angle keeps more than ${pct(spinVar(TH_STAR) / TOT2)}. Lock it in.` : `Spread kept now: <b>${pct(spinVar(S.th) / TOT2)}</b>. It is the <b>average squared distance</b> of all 10 shadows from the centre, so every planet counts, not just the two at the ends. The cyan part of each bar below is that planet’s shadow².`}</div>
-        <p class="note">Planets far from the screen cast blurry shadows: that blur is what the screen cannot show.</p>
+        <p class="note">The faint triangle shows one planet’s d, z and r: d² = z² + r². Hover any planet to move it. A big r is also why a far planet’s shadow is blurry.</p>
         <div class="row"><button class="btn primary" data-act="lock1s" ${S.busy ? 'disabled' : ''}>Lock in this screen</button><button class="btn ghost sm" data-act="sweep" ${S.busy ? 'disabled' : ''}>Sweep all angles</button><button class="btn ghost sm" data-act="snap" ${S.busy ? 'disabled' : ''}>Show me PC1</button></div>`;
     } else if (S.pc2 == null) {
       const best = spinVar(TH_STAR) / TOT2;
