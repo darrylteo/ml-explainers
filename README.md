@@ -1,5 +1,7 @@
 # ML Explainers
 
+[![The ML Explainers gallery: five explainer cards on a dark starfield](docs/gallery.png)](https://ml-explainers.sutdpm.workers.dev)
+
 Hands-on, animated explainers for teaching machine learning. Each one starts with a 10-row table: the learner builds the first model by hand, then watches the algorithm repeat the recipe at full scale. A code panel beside each step shows the matching R or Python line.
 
 **Live:** https://ml-explainers.sutdpm.workers.dev
