@@ -1,6 +1,6 @@
 # Notes for coding agents
 
-Read this before you change an explainer. It holds the maintainer notes that used to sit in the README.
+Read this before you change an explainer.
 
 ## Layout
 
