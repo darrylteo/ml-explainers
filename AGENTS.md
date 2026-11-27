@@ -4,7 +4,7 @@ Read this before you change an explainer. It holds the maintainer notes that use
 
 ## Layout
 
-Each explainer is one HTML file in `site/<name>/index.html`: no build step and no dependencies apart from Google Fonts. `site/index.html` is the gallery; add a new entry to its `EXPLAINERS` list when you add an explainer.
+Each explainer is one HTML file in `site/<name>/index.html`: no build step and no dependencies apart from Google Fonts and KaTeX (jsDelivr CDN, pinned 0.16.11). `site/index.html` is the gallery; add a new entry to its `EXPLAINERS` list when you add an explainer.
 
 Shared by every page, in `site/shared/`:
 
